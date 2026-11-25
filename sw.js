@@ -1,5 +1,5 @@
 // Service worker : l'app fonctionne hors connexion (sauf météo et détection du golf).
-const CACHE = 'mongolf-v1';
+const CACHE = 'mongolf-v2';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener('activate', (e) => e.waitUntil(
