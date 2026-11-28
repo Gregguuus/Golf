@@ -33,11 +33,23 @@
     <div class="tools">
       <button class="tool shot" id="btn-shot" data-a="shot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="9.5" cy="9.5" r=".9" fill="currentColor"/><circle cx="13" cy="8.5" r=".9" fill="currentColor"/><circle cx="10.5" cy="13" r=".9" fill="currentColor"/><circle cx="14.5" cy="12" r=".9" fill="currentColor"/></svg><span>Coup</span></button>
       <button class="tool" id="btn-motion" data-a="motion"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M3 9c-1 2-1 4 0 6M21 9c1 2 1 4 0 6"/></svg><span>Auto</span></button>
+      <button class="tool" data-a="viseur"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h2l1.6-2h5.8l1.6 2h2A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><circle cx="12" cy="13" r="4"/></svg><span>Viseur</span></button>
       <button class="tool" data-a="recenter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/></svg><span>Centrer</span></button>
     </div>
     <div class="last-shot" id="last-shot"></div>
     <div class="play-status" id="play-status"></div>
     <nav class="play-nav"><button id="pv-prev" data-a="pv-prev">‹</button><button id="pv-score" class="main" data-a="pv-score">Saisir le score</button><button id="pv-next" data-a="pv-next">›</button></nav>
+  </section>
+  <section class="viseur" id="viseur">
+    <video id="vs-video" playsinline muted autoplay></video>
+    <div class="vs-flag" id="vs-flag"><i></i><b></b></div>
+    <div class="vs-dir" id="vs-dir"></div>
+    <div class="vs-line" id="vs-top"><span>Haut du drapeau</span></div>
+    <div class="vs-line" id="vs-bot"><span>Pied du mât</span></div>
+    <div class="vs-read"><div id="vs-gps"></div><div id="vs-range"></div></div>
+    <div class="vs-zoom" id="vs-zoom"><button data-z="1">×1</button><button data-z="2">×2</button><button data-z="4">×4</button><button data-z="8">×8</button></div>
+    <button class="vs-close" data-a="close-viseur">Fermer</button>
+    <p class="vs-help">Visez le drapeau. Faites glisser les deux lignes sur le haut du drapeau et le pied du mât : le télémètre affiche la distance.</p>
   </section>
   <div class="toast" id="toast"></div>
   <script src="lib/maplibre-gl.js"></script>

@@ -316,7 +316,8 @@ function initMap() {
     map.addSource('shots', { type: 'geojson', data: fc([]) });
     map.addLayer({ id: 'shots', type: 'line', source: 'shots', paint: { 'line-color': '#ffd23f', 'line-width': 3, 'line-dasharray': [2, 1.5] } });
     mk.tee = new maplibregl.Marker({ element: el('mk-tee') }).setLngLat([0, 0]).addTo(map);
-    mk.pin = new maplibregl.Marker({ element: el('mk-pin', I.flag) }).setLngLat([0, 0]).addTo(map);
+    mk.pin = new maplibregl.Marker({ element: el('mk-pin', I.flag), draggable: true }).setLngLat([0, 0]).addTo(map);
+    mk.pin.on('dragend', () => { const l = mk.pin.getLngLat(), h = db.activeRound.holes[S.hole]; h.pin = { lat: +l.lat.toFixed(6), lon: +l.lng.toFixed(6) }; save(); updatePlay(); toast('Drapeau du jour placé', 'Au centre', () => { delete h.pin; save(); updatePlay(); }); });
     mk.me = new maplibregl.Marker({ element: el('mk-me') }).setLngLat([0, 0]).addTo(map);
     mk.target = new maplibregl.Marker({ element: el('mk-target', '<i></i><span class="lab"></span>'), draggable: true }).setLngLat([0, 0]).addTo(map);
     mk.target.on('drag', () => { const l = mk.target.getLngLat(); target = { lat: l.lat, lon: l.lng }; targetManual = true; drawAim(); });
@@ -332,7 +333,7 @@ function origin() { // ma position si je suis sur ce trou, sinon le départ
   return near ? { p: S.pos, me: true } : { p: geo.tee, me: false };
 }
 function defaultTarget() {
-  const h = db.activeRound.holes[S.hole], o = origin(), toPin = dist(o.p, geo.center);
+  const h = db.activeRound.holes[S.hole], o = origin(), toPin = dist(o.p, pinOf());
   if (h.par === 3 || toPin < 230) return null;
   // Point d'atterrissage à ~210 m le long du tracé du trou
   const pts = [o.p, ...geo.line.filter((p) => dist(p, geo.center) < toPin)];
@@ -365,7 +366,7 @@ function showHole(fit) {
 function arcCoords(c, b, m, span = 30) { const out = []; for (let a = -span; a <= span; a += 3) out.push(LL(dest(c, b + a, m))); return out; }
 function drawAim() {
   if (!geo || !mapReady) return;
-  const o = origin(), b = bearing(o.p, target || geo.center), toPin = dist(o.p, geo.center);
+  const o = origin(), b = bearing(o.p, target || pinOf()), toPin = dist(o.p, pinOf());
   arcLabels.forEach((m) => m.remove()); arcLabels = [];
   const arcs = [];
   for (const m of [50, 100, 150, 200, 250]) {
@@ -376,16 +377,18 @@ function drawAim() {
   map.getSource('arcs').setData(fc(arcs));
   const tEl = mk.target.getElement();
   if (target) {
-    map.getSource('aim').setData(fc([lineF([o.p, target, geo.center])]));
+    map.getSource('aim').setData(fc([lineF([o.p, target, pinOf()])]));
     mk.target.setLngLat(LL(target)); tEl.style.display = '';
-    $('.lab', tEl).innerHTML = `<small>${Math.round(dist(target, geo.center))}<span class="up">${I.arrow}</span></small><b>${Math.round(dist(o.p, target))}</b>`;
-  } else { map.getSource('aim').setData(fc([lineF([o.p, geo.center])])); tEl.style.display = 'none'; }
+    $('.lab', tEl).innerHTML = `<small>${Math.round(dist(target, pinOf()))}<span class="up">${I.arrow}</span></small><b>${Math.round(dist(o.p, target))}</b>`;
+  } else { map.getSource('aim').setData(fc([lineF([o.p, pinOf()])])); tEl.style.display = 'none'; }
+  mk.pin.setLngLat(LL(pinOf()));
 }
+const pinOf = () => { const h = db.activeRound?.holes[S.hole]; return h?.pin || geo.center; };
 function greenDistances(o) {
-  if (!geo.green) return { front: null, center: dist(o, geo.center), back: null };
-  const b0 = bearing(o, geo.center);
+  if (!geo.green) return { front: null, center: dist(o, pinOf()), back: null };
+  const b0 = bearing(o, pinOf());
   const proj = geo.green.map((p) => { const q = P(p); return dist(o, q) * Math.cos((bearing(o, q) - b0) * RAD); });
-  return { front: Math.max(0, Math.min(...proj)), center: dist(o, geo.center), back: Math.max(...proj) };
+  return { front: Math.max(0, Math.min(...proj)), center: dist(o, pinOf()), back: Math.max(...proj) };
 }
 function updatePlay() {
   if (!S.play || !geo || !mapReady) return;
@@ -418,7 +421,7 @@ function updatePlay() {
     shotLabels.push(new maplibregl.Marker({ element: el('mk-shot', `<i>${i + 1}</i>${d ? `<span>${d} m</span>` : ''}`) }).setLngLat([s.lon, s.lat]).addTo(map));
   });
   const ls = $('#last-shot');
-  ls.innerHTML = shots.length && S.pos && o.me ? `Coup ${shots.length} : <b>${Math.round(dist(shots[shots.length - 1], S.pos))} m</b>` : '';
+  ls.innerHTML = shots.length && S.pos && o.me ? `Coup ${shots.length} : <b>${Math.round(dist(shots[shots.length - 1], S.pos))} m</b> · reste <b>${Math.round(dist(S.pos, pinOf()))} m</b>` : '';
   ls.style.display = ls.innerHTML ? '' : 'none';
   $('#btn-motion').classList.toggle('on', motionOn);
   $('#btn-shot span').textContent = shots.length ? `Coup ${shots.length + 1}` : 'Coup';
@@ -461,6 +464,75 @@ function onMotion(e) {
   if (now - lastSwing < 20000 || !S.play || (S.pos?.speed || 0) > 1.5) return;
   if (Math.max(...peak.map((p) => p.rot)) > 300 && Math.max(...peak.map((p) => p.acc)) > 14) { lastSwing = now; peak = []; addShot(true); }
 }
+
+
+/* ================= Viseur caméra : réalité augmentée + télémètre ================= */
+// Réalité augmentée : GPS + boussole + inclinaison placent le drapeau sur l'image de la caméra.
+// Télémètre : un mât de drapeau mesure 2,13 m ; sa hauteur à l'écran donne la distance.
+const FLAG_H = 2.13;
+const V = { stream: null, heading: null, pitch: 90, raf: 0, top: 0.38, bottom: 0.62, zoom: 1 };
+async function openViseur() {
+  if (!geo) return;
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function')
+      await DeviceOrientationEvent.requestPermission().catch(() => 'denied');
+  } catch {}
+  try { V.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }); }
+  catch { return toast('Caméra non autorisée'); }
+  const vs = $('#viseur'); vs.classList.add('on');
+  const v = $('#vs-video'); v.srcObject = V.stream; v.play().catch(() => {});
+  window.addEventListener('deviceorientation', onOrient, true);
+  V.top = 0.38; V.bottom = 0.62; setZoom(1); loopViseur();
+}
+function closeViseur() {
+  cancelAnimationFrame(V.raf); window.removeEventListener('deviceorientation', onOrient, true);
+  V.stream?.getTracks().forEach((t) => t.stop()); V.stream = null; $('#viseur').classList.remove('on');
+}
+function onOrient(e) {
+  let hd = null;
+  if (typeof e.webkitCompassHeading === 'number') hd = e.webkitCompassHeading; // iPhone
+  else if (e.absolute && e.alpha != null) hd = (360 - e.alpha) % 360;
+  if (hd != null) V.heading = V.heading == null ? hd : V.heading + (((hd - V.heading + 540) % 360) - 180) * 0.25; // lissage
+  if (e.beta != null) V.pitch = e.beta;
+}
+function focalPx() { // focale en pixels à l'écran (caméra principale 1x, ~67° sur le grand côté du capteur)
+  const v = $('#vs-video'), ew = v.clientWidth, eh = v.clientHeight, vw = v.videoWidth || 1080, vh = v.videoHeight || 1920;
+  const sc = Math.max(ew / vw, eh / vh);
+  return ((Math.max(vw, vh) * sc) / 2 / Math.tan((67 * RAD) / 2)) * V.zoom;
+}
+function placeLines() {
+  const h = $('#viseur').clientHeight;
+  $('#vs-top').style.top = V.top * h + 'px'; $('#vs-bot').style.top = V.bottom * h + 'px';
+  const gap = Math.abs(V.bottom - V.top) * h, d = (FLAG_H * focalPx()) / Math.max(gap, 1);
+  $('#vs-range').innerHTML = gap > 6 ? `<small>Télémètre</small><b>${Math.round(d)} m</b>` : '';
+}
+function loopViseur() {
+  V.raf = requestAnimationFrame(loopViseur);
+  const o = S.pos || origin().p, pin = pinOf(), d = dist(o, pin);
+  $('#vs-gps').innerHTML = `<small>Drapeau (GPS)</small><b>${Math.round(d)} m</b>`;
+  const mkEl = $('#vs-flag'), arrow = $('#vs-dir'), W = $('#viseur').clientWidth, H = $('#viseur').clientHeight, f = focalPx();
+  if (V.heading == null) { mkEl.style.display = 'none'; arrow.textContent = 'Tournez l\'iPhone vers le green (boussole en calibrage…)'; arrow.style.display = ''; return; }
+  const rel = ((bearing(o, pin) - V.heading + 540) % 360) - 180; // angle drapeau / axe de la caméra
+  const elev = (V.pitch - 90) * RAD; // caméra relevée = beta > 90
+  const x = W / 2 + Math.tan(rel * RAD) * f, y = H / 2 + Math.tan(elev) * f;
+  if (Math.abs(rel) < 60 && x > -40 && x < W + 40) {
+    mkEl.style.display = ''; mkEl.style.transform = `translate(${x}px, ${y}px)`; $('b', mkEl).textContent = Math.round(d) + ' m';
+    arrow.style.display = 'none';
+  } else { mkEl.style.display = 'none'; arrow.style.display = ''; arrow.textContent = rel > 0 ? 'Le drapeau est à droite →' : '← Le drapeau est à gauche'; }
+}
+function setZoom(z) {
+  V.zoom = z; $('#vs-video').style.transform = `scale(${z})`;
+  $$('#vs-zoom button').forEach((b) => b.classList.toggle('on', +b.dataset.z === z)); placeLines();
+}
+document.addEventListener('click', (e) => { const b = e.target.closest('#vs-zoom button'); if (b) setZoom(+b.dataset.z); });
+let dragLine = null;
+document.addEventListener('pointerdown', (e) => { const l = e.target.closest('.vs-line'); if (l) { dragLine = l.id; l.setPointerCapture?.(e.pointerId); e.preventDefault(); } });
+document.addEventListener('pointermove', (e) => {
+  if (!dragLine) return;
+  const r = $('#viseur').getBoundingClientRect(), y = Math.min(0.97, Math.max(0.03, (e.clientY - r.top) / r.height));
+  if (dragLine === 'vs-top') V.top = y; else V.bottom = y; placeLines();
+});
+document.addEventListener('pointerup', () => { dragLine = null; });
 
 /* ================= Vues ================= */
 const TABS = [['today', 'Aujourd\'hui', 'today'], ['round', 'Partie', 'flag'], ['swing', 'Swing', 'video'], ['journal', 'Journal', 'train'], ['signets', 'Signets', 'bookmark']];
@@ -739,6 +811,8 @@ const A = {
   shot: () => addShot(false),
   motion: toggleMotion,
   recenter: () => showHole(true),
+  viseur: openViseur,
+  'close-viseur': closeViseur,
   finish: () => { closeSheet(); finishRound(); },
   abandon: () => { if (confirm('Abandonner la partie ? Elle ne sera pas enregistrée.')) { db.activeRound = null; curCourse = null; save(); releaseWake(); closeSheet(); closePlay(); } },
   'view-round': (b) => { const r = db.rounds.find((x) => x.id === b.dataset.id); r && sheetRoundView(r); },
