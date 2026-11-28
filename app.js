@@ -627,9 +627,15 @@ function searchPhoton(q) {
   }, 450);
 }
 function vSwing() {
-  return header('Swing', '', `<label class="icon-btn" aria-label="Importer une vidéo">${I.upload}<input type="file" id="swing-file" accept="video/*" hidden></label>`)
-    + `<div class="cam" id="cam">${S.cam ? '<video id="preview" playsinline muted autoplay></video>' : `<div class="ph">${I.cam}<div>Posez le téléphone à hauteur de hanches,<br>face à vous ou dans l'axe de la cible.</div><button class="btn small" data-a="cam-on">Activer la caméra</button></div>`}
-       ${S.cam ? `<button class="icon-btn close" data-a="cam-off" aria-label="Fermer">${I.x}</button><button class="shutter ${S.rec ? 'rec' : ''}" data-a="rec" aria-label="Enregistrer"></button>${S.rec ? '<div class="timer" id="timer">0:00</div>' : ''}` : ''}</div>`
+  return header('Swing')
+    + `<label class="card slomo"><input type="file" id="swing-file" accept="video/*" hidden>
+        <div class="slomo-badge">240<small>i/s</small></div>
+        <div class="main"><div class="t">Importer un ralenti de l'iPhone</div><div class="s">Le plus lent possible : filmez en mode <b>RALENTI</b> de l'appareil photo, puis choisissez la vidéo ici.</div></div>${I.chev}</label>
+      <details class="card pad slomo-help"><summary>Régler l'iPhone sur 240 i/s (une seule fois)</summary>
+        <ol><li>Ouvrez <b>Réglages</b> → <b>Appareil photo</b> → <b>Enregistrer au ralenti</b>.</li><li>Choisissez <b>1080p à 240 i/s</b>.</li>
+        <li>Dans l'appareil photo, glissez jusqu'à <b>RALENTI</b>, filmez votre swing.</li><li>Revenez ici et touchez « Importer un ralenti ».</li></ol></details>`
+    + `<h2 class="sec">Ou filmer ici</h2><div class="cam" id="cam">${S.cam ? '<video id="preview" playsinline muted autoplay></video>' : `<div class="ph">${I.cam}<div>Le navigateur filme au mieux en 60 à 240 i/s selon l'iPhone.<br>Pour un vrai 240 i/s, utilisez l'import ci-dessus.</div><button class="btn small" data-a="cam-on">Activer la caméra</button></div>`}
+       ${S.cam ? `<div class="fps-badge">${S.camFps || '?'} i/s</div><button class="icon-btn close" data-a="cam-off" aria-label="Fermer">${I.x}</button><button class="shutter ${S.rec ? 'rec' : ''}" data-a="rec" aria-label="Enregistrer"></button>${S.rec ? '<div class="timer" id="timer">0:00</div>' : ''}` : ''}</div>`
     + `<h2 class="sec">Mes swings</h2><div class="group" id="swings">${swingsHTML()}</div>`;
 }
 function swingsHTML() {
@@ -724,13 +730,16 @@ function sheetSession() {
 function sheetPlayer(id) {
   const s = S.swings.find((x) => x.id === id); if (!s) return;
   const url = URL.createObjectURL(s.blob);
+  const fps = s.fps || 240; // un ralenti iPhone importé contient jusqu'à 240 images par seconde
   openSheet(sheetHead('Swing') + `<div class="player"><video id="pv" src="${url}" playsinline controls autoplay muted loop></video></div>
-       <div class="seg mt" id="rate">${[[0.25, '×¼'], [0.5, '×½'], [1, '×1']].map(([v, l]) => `<button data-v="${v}" class="${v === 0.5 ? 'on' : ''}">${l}</button>`).join('')}</div>
-       <div class="btns two"><button class="btn gray" id="fb">‹ Image</button><button class="btn gray" id="ff">Image ›</button></div>`, () => URL.revokeObjectURL(url));
-  const v = $('#pv'); v.playbackRate = 0.5; v.onloadedmetadata = () => (v.playbackRate = 0.5);
-  $$('#rate button').forEach((b) => (b.onclick = () => { v.playbackRate = +b.dataset.v; v.play(); $$('#rate button').forEach((x) => x.classList.toggle('on', x === b)); }));
-  $('#fb').onclick = () => { v.pause(); v.currentTime = Math.max(0, v.currentTime - 1 / 30); };
-  $('#ff').onclick = () => { v.pause(); v.currentTime += 1 / 30; };
+       <div class="seg mt" id="rate">${[[0.0625, '×1/16'], [0.125, '×⅛'], [0.25, '×¼'], [0.5, '×½'], [1, '×1']].map(([v, l]) => `<button data-v="${v}" class="${v === 0.125 ? 'on' : ''}">${l}</button>`).join('')}</div>
+       <div class="btns two"><button class="btn gray" id="fb">‹ Image</button><button class="btn gray" id="ff">Image ›</button></div>
+       <p class="foot" style="text-align:center">Image par image : 1/${fps} s par appui${s.fps ? ` · filmé à ${s.fps} i/s` : ''}.</p>`, () => URL.revokeObjectURL(url));
+  const v = $('#pv'), setRate = (r) => { try { v.playbackRate = r; } catch { v.playbackRate = 0.25; } };
+  setRate(0.125); v.onloadedmetadata = () => setRate(0.125);
+  $$('#rate button').forEach((b) => (b.onclick = () => { setRate(+b.dataset.v); v.play(); $$('#rate button').forEach((x) => x.classList.toggle('on', x === b)); }));
+  $('#fb').onclick = () => { v.pause(); v.currentTime = Math.max(0, v.currentTime - 1 / fps); };
+  $('#ff').onclick = () => { v.pause(); v.currentTime += 1 / fps; };
 }
 function sheetRoundView(r) {
   openSheet(sheetHead(esc(r.course)) + `<div class="card score-head"><div><b>${rStrokes(r)}</b><span>Score</span></div><div><b>${toPar(rDiff(r))}</b><span>Par</span></div><div><b>${sum(r.holes, (h) => h.putts)}</b><span>Putts</span></div></div>
@@ -744,8 +753,15 @@ function sheetRoundMenu() {
 
 /* ================= Caméra ================= */
 async function camOn() {
-  try { S.cam = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', frameRate: { ideal: 60 }, height: { ideal: 1080 } }, audio: false }); render(); }
-  catch { toast('Caméra non autorisée. Utilisez ⬆ pour importer une vidéo.'); }
+  // On demande la cadence la plus haute possible : 240, puis 120, puis 60 images par seconde.
+  const tries = [240, 120, 60].map((fps) => ({ video: { facingMode: 'environment', frameRate: { min: fps, ideal: fps }, height: { ideal: fps > 60 ? 720 : 1080 } }, audio: false }));
+  tries.push({ video: { facingMode: 'environment' }, audio: false });
+  for (const c of tries) {
+    try { S.cam = await navigator.mediaDevices.getUserMedia(c); break; } catch (e) { if (e.name === 'NotAllowedError') break; }
+  }
+  if (!S.cam) return toast('Caméra non autorisée. Importez une vidéo « Ralenti » de l\'iPhone.');
+  S.camFps = Math.round(S.cam.getVideoTracks()[0]?.getSettings?.().frameRate || 30);
+  render();
 }
 function stopCam() { if (S.rec) S.rec.stop(); S.cam?.getTracks().forEach((t) => t.stop()); S.cam = null; }
 let timerI;
@@ -755,12 +771,12 @@ function toggleRec() {
   const mime = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find((m) => MediaRecorder.isTypeSupported?.(m)) || '';
   const chunks = [], rec = new MediaRecorder(S.cam, mime ? { mimeType: mime } : undefined);
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-  rec.onstop = () => { clearInterval(timerI); S.rec = null; saveSwing(new Blob(chunks, { type: rec.mimeType || mime || 'video/webm' })); if (S.tab === 'swing') render(); };
+  rec.onstop = () => { clearInterval(timerI); S.rec = null; saveSwing(new Blob(chunks, { type: rec.mimeType || mime || 'video/webm' }), S.camFps); if (S.tab === 'swing') render(); };
   rec.start(); S.rec = rec; S.recStart = Date.now(); render();
   timerI = setInterval(() => { const t = $('#timer'), s = Math.floor((Date.now() - S.recStart) / 1000); if (t) t.textContent = `${Math.floor(s / 60)}:${pad2(s % 60)}`; }, 250);
 }
-async function saveSwing(blob) {
-  try { const s = { id: uid(), date: new Date().toISOString(), blob }; await vPut(s); await loadSwings(); toast('Swing enregistré'); sheetPlayer(s.id); }
+async function saveSwing(blob, fps = 0) {
+  try { const s = { id: uid(), date: new Date().toISOString(), blob, fps }; await vPut(s); await loadSwings(); toast('Swing enregistré'); sheetPlayer(s.id); }
   catch { toast('Espace insuffisant pour la vidéo'); }
 }
 async function loadSwings() { try { S.swings = (await vAll()).sort((a, b) => b.date.localeCompare(a.date)); } catch { S.swings = []; } if ($('#swings')) $('#swings').innerHTML = swingsHTML(); }
