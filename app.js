@@ -548,18 +548,23 @@ const kmTxt = (m) => (m < 800 ? 'Vous y êtes' : (m / 1000).toFixed(m < 10000 ? 
 function courseRow(c) {
   return `<button class="row" data-a="pick" data-id="${c.id}"><div class="ic">${I.flag}</div><div class="main"><div class="t">${esc(c.name)}</div><div class="s">${[c.city, kmTxt(c.d)].filter(Boolean).map(esc).join(' · ')}</div></div>${c.mapped >= 9 ? '<span class="pill acc">Plan GPS</span>' : ''}${I.chev}</button>`;
 }
+function greeting() { const h = new Date().getHours(); return h < 5 ? 'Bonne nuit' : h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir'; }
 function vToday() {
   const r = db.activeRound, full = db.rounds.filter((x) => x.complete && x.holes.length === 18);
   const best = full.length ? Math.min(...full.map(rStrokes)) : '—';
-  let callout = '';
-  if (r) callout = `<button class="card callout row" data-a="resume" style="margin-top:12px"><div class="badge">${I.flag}</div><div class="main"><div class="t">Partie en cours</div><div class="s">${esc(r.course)} · ${played(r).length}/${r.holes.length} trous · ${played(r).length ? toPar(rDiff(r)) : 'E'}</div></div>${I.chev}</button>`;
-  else if (S.here) callout = `<button class="card callout row" data-a="pick" data-id="${S.here.id}" style="margin-top:12px"><div class="badge">${I.pin}</div><div class="main"><div class="t">Vous êtes à ${esc(S.here.name)}</div><div class="s">Touchez pour jouer avec le plan GPS</div></div>${I.chev}</button>`;
-  const near = sortedCourses().slice(0, 4), month = isoDay().slice(0, 7);
-  return header('Aujourd\'hui', fmtDay(new Date(), { weekday: 'long', day: 'numeric', month: 'long' }), `<button class="icon-btn" data-a="settings" aria-label="Réglages">${I.gear}</button>`)
-    + heroHTML() + callout
-    + `<h2 class="sec">Golfs près de ${S.pos ? 'vous' : 'Luzarches'} <button data-a="tab" data-t="round">Tous</button></h2><div class="group">${near.map(courseRow).join('') || `<div class="empty">${S.index ? 'Base des golfs en cours de création…' : '<span class="spin"></span>'}</div>`}</div>`
-    + `<h2 class="sec">Ma saison</h2>` + tiles([[best, 'Meilleur score 18 trous'], [db.rounds.length, 'Parties jouées'],
-      [(sum(db.sessions.filter((s) => s.date.startsWith(month)), (s) => s.duration) / 60).toFixed(1).replace('.', ',') + ' h', 'Entraînement ce mois-ci']]);
+  const near = sortedCourses(), month = isoDay().slice(0, 7);
+  const first = S.here || near.find((c) => c.mapped >= 9) || near[0];
+  let cta;
+  if (r) cta = `<button class="cta" data-a="resume"><div class="cta-k">Partie en cours</div><div class="cta-t">${esc(r.course)}</div><div class="cta-s">Trou ${S.hole + 1} · ${played(r).length}/${r.holes.length} joués · ${played(r).length ? toPar(rDiff(r)) : 'E'}</div><span class="cta-go">Reprendre ${I.chev}</span></button>`;
+  else if (first) cta = `<button class="cta" data-a="pick" data-id="${first.id}"><div class="cta-k">${S.here ? 'Vous êtes sur le parcours' : 'Prêt à jouer ?'}</div><div class="cta-t">${esc(first.name)}</div><div class="cta-s">${first.mapped >= 9 ? 'Plan GPS satellite · distances au drapeau' : 'Carte de score'}${first.d != null && !S.here ? ' · ' + kmTxt(first.d) : ''}</div><span class="cta-go">Jouer ${I.chev}</span></button>`;
+  else cta = `<div class="cta muted-cta"><div class="cta-k">Golfs</div><div class="cta-t">Base des golfs en préparation</div><div class="cta-s">Les parcours autour de Luzarches arrivent dans quelques minutes.</div></div>`;
+  const carousel = near.slice(0, 8).map((c) => `<button class="gc" data-a="pick" data-id="${c.id}"><div class="gc-top">${c.mapped >= 9 ? '<span class="pill gps">GPS</span>' : ''}</div><div class="gc-n">${esc(c.name.replace(/^Golf (de |du |d'|des )?/i, ''))}</div><div class="gc-s">${esc(c.city || '')}${c.d != null ? ' · ' + kmTxt(c.d) : ''}</div></button>`).join('');
+  return header(greeting(), fmtDay(new Date(), { weekday: 'long', day: 'numeric', month: 'long' }), `<button class="icon-btn" data-a="settings" aria-label="Réglages">${I.gear}</button>`)
+    + cta + `<div class="mt"></div>` + heroHTML()
+    + (carousel ? `<h2 class="sec">Golfs à proximité <button data-a="tab" data-t="round">Tout voir</button></h2><div class="gcs">${carousel}</div>` : '')
+    + `<h2 class="sec">Ma saison</h2>` + tiles([[best, 'Meilleur score'], [db.rounds.length, 'Parties'],
+      [(sum(db.sessions.filter((s) => s.date.startsWith(month)), (s) => s.duration) / 60).toFixed(1).replace('.', ',') + ' h', 'Entraînement ce mois']])
+    + `<button class="pro-banner" data-a="pro"><div class="pro-mark">PRO</div><div class="main"><div class="t">Mon Golf Pro</div><div class="s">Plan GPS, viseur, suivi des coups, ralenti 240 i/s</div></div>${I.chev}</button>`;
 }
 function roundRow(x) {
   const d = rDiff(x);
@@ -671,7 +676,12 @@ function sheetSettings() {
       <div class="gh">Mes données</div><div class="group plain">
         <button class="row" data-a="export"><div class="main"><div class="t" style="color:var(--accent)">Exporter une sauvegarde</div></div></button>
         <label class="row"><div class="main"><div class="t" style="color:var(--accent)">Restaurer une sauvegarde</div></div><input type="file" id="import" accept="application/json,.json" hidden></label></div>
-      <p class="foot">Tout reste sur votre téléphone. Base de ${S.index?.length || 0} golfs, mise à jour chaque mois depuis OpenStreetMap.</p>
+      <div class="gh">Mon Golf</div><div class="group plain">
+        <button class="row" data-a="pro"><div class="main"><div class="t">Mon Golf Pro</div></div><span class="pill pro-pill">Accès anticipé</span>${I.chev}</button>
+        <button class="row" data-a="legal" data-k="privacy"><div class="main"><div class="t">Confidentialité</div></div>${I.chev}</button>
+        <button class="row" data-a="legal" data-k="terms"><div class="main"><div class="t">Conditions d'utilisation</div></div>${I.chev}</button>
+        <button class="row" data-a="onboarding"><div class="main"><div class="t">Revoir la présentation</div></div>${I.chev}</button></div>
+      <p class="foot">Mon Golf ${APP_VERSION}. Tout reste sur votre téléphone. Base de ${S.index?.length || 0} golfs, mise à jour chaque mois depuis OpenStreetMap.</p>
       <p class="foot">Météo : Open-Meteo · Satellite : Esri · Plans des golfs : © contributeurs OpenStreetMap.</p>`);
   $('#o-auto').onchange = (e) => { db.settings.auto = e.target.checked; save(); };
   $('#o-wake').onchange = (e) => { db.settings.wake = e.target.checked; save(); e.target.checked ? keepAwake() : releaseWake(); };
@@ -751,6 +761,48 @@ function sheetRoundMenu() {
        <button class="row" data-a="abandon"><div class="main"><div class="t" style="color:var(--red)">Abandonner la partie</div></div></button></div>`);
 }
 
+const APP_VERSION = '1.0';
+function sheetPro() {
+  const f = [['target', 'Plan GPS satellite', 'Chaque trou en vue satellite, distances début, centre et fond de green, point de visée.'],
+    ['cam', 'Viseur caméra', 'Le drapeau en réalité augmentée et un télémètre optique.'],
+    ['ball', 'Suivi des coups', 'Chaque coup localisé au GPS, détection du swing par les capteurs de l\'iPhone.'],
+    ['video', 'Ralenti 240 i/s', 'Revoyez votre swing jusqu\'à ×1/16, image par image.'],
+    ['list', 'Statistiques', 'Score, putts, évolution partie après partie.']];
+  openSheet(sheetHead('', '', 'Fermer') + `<div class="pro-hero"><div class="pro-mark big">PRO</div><h2>Mon Golf Pro</h2><p>Tout ce qu'il faut pour jouer mieux, sur votre iPhone.</p></div>
+    <div class="group plain">${f.map(([ic, t, d]) => `<div class="row"><div class="ic pro-ic">${I[ic]}</div><div class="main"><div class="t">${t}</div><div class="s" style="white-space:normal">${d}</div></div></div>`).join('')}</div>
+    <div class="card pad mt" style="text-align:center"><div class="muted" style="font-size:14px">Pendant l'accès anticipé</div><div style="font-size:28px;font-weight:800;margin:4px 0">Gratuit</div><div class="muted" style="font-size:14px">Toutes les fonctions Pro sont incluses.</div></div>
+    <div class="btns"><button class="btn gold" data-a="close">Continuer avec l'accès anticipé</button></div>`);
+}
+const LEGAL = {
+  privacy: ['Confidentialité', `<p><b>Vos données restent sur votre iPhone.</b> Parties, séances, coups et vidéos sont enregistrés uniquement dans le stockage de l'application sur votre appareil. Aucun compte, aucun serveur Mon Golf.</p>
+    <p><b>Localisation.</b> Votre position sert à calculer les distances et à reconnaître le golf. Elle est envoyée arrondie (environ 100 m) au service météo Open-Meteo, et à Photon (OpenStreetMap) uniquement quand vous cherchez un golf.</p>
+    <p><b>Caméra et capteurs.</b> Utilisés seulement quand vous ouvrez le viseur, filmez un swing ou activez la détection des coups. Rien n'est envoyé.</p>
+    <p><b>Imagerie satellite.</b> Les images sont chargées depuis les serveurs d'Esri.</p>
+    <p>Pour tout effacer : supprimez l'application de l'écran d'accueil et les données du site dans Réglages → Safari.</p>`],
+  terms: ['Conditions d\'utilisation', `<p>Mon Golf est fourni en accès anticipé, sans garantie. Les distances sont indicatives : elles dépendent de la précision du GPS (± 3 à 5 m) et des plans OpenStreetMap.</p>
+    <p>Respectez les règles de votre club et l'étiquette du golf ; n'utilisez pas l'application si elle ralentit le jeu.</p>
+    <p>Données des golfs © contributeurs OpenStreetMap (licence ODbL). Météo : Open-Meteo. Imagerie : Esri, Maxar. Ces services sont utilisés dans le cadre de leurs offres gratuites.</p>`],
+};
+function sheetLegal(k) { const [t, body] = LEGAL[k]; openSheet(sheetHead(t) + `<div class="card pad legal">${body}</div>`); }
+
+/* ================= Présentation (premier lancement) ================= */
+const ONB = [
+  ['target', 'Chaque trou, vu du ciel', 'Le plan satellite de votre golf, la distance au drapeau en direct, et un point de visée à déplacer du doigt.'],
+  ['ball', 'Vos coups, mesurés', 'Touchez « Coup » ou laissez l\'iPhone détecter votre swing : chaque distance est enregistrée.'],
+  ['video', 'Votre swing au ralenti', 'Importez un ralenti 240 i/s de l\'iPhone et revoyez chaque image de votre geste.'],
+];
+let onbStep = 0;
+function showOnboarding() {
+  const o = $('#onb'), [ic, t, d] = ONB[onbStep] || [];
+  o.classList.add('on');
+  o.innerHTML = onbStep < ONB.length
+    ? `<div class="onb-art">${I[ic]}</div><h1>${t}</h1><p>${d}</p><div class="onb-dots">${ONB.map((_, i) => `<i class="${i === onbStep ? 'on' : ''}"></i>`).join('')}</div>
+       <button class="btn gold" data-a="onb-next">Continuer</button><button class="btn link" data-a="onb-skip">Passer</button>`
+    : `<div class="onb-art">${I.pin}</div><h1>Votre position</h1><p>Mon Golf en a besoin pour reconnaître votre golf et calculer les distances. Elle reste sur votre iPhone.</p>
+       <button class="btn gold" data-a="onb-geo">Autoriser la localisation</button><button class="btn link" data-a="onb-skip">Plus tard</button>`;
+}
+function endOnboarding() { db.onboarded = true; save(); $('#onb').classList.remove('on'); startGPS(); render(); }
+
 /* ================= Caméra ================= */
 async function camOn() {
   // On demande la cadence la plus haute possible : 240, puis 120, puis 60 images par seconde.
@@ -827,6 +879,12 @@ const A = {
   shot: () => addShot(false),
   motion: toggleMotion,
   recenter: () => showHole(true),
+  pro: () => { closeSheet(); setTimeout(sheetPro, 50); },
+  legal: (b) => sheetLegal(b.dataset.k),
+  onboarding: () => { closeSheet(); onbStep = 0; showOnboarding(); },
+  'onb-next': () => { onbStep++; showOnboarding(); },
+  'onb-skip': endOnboarding,
+  'onb-geo': endOnboarding,
   viseur: openViseur,
   'close-viseur': closeViseur,
   finish: () => { closeSheet(); finishRound(); },
@@ -857,7 +915,7 @@ render();
 loadIndex();
 loadSwings();
 fetchWeather();
-startGPS();
+if (db.onboarded) startGPS(); else showOnboarding();
 if (db.activeRound) keepAwake();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { keepAwake(); fetchWeather(); } });
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});

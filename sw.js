@@ -1,5 +1,5 @@
 // Service worker : l'app fonctionne même avec un réseau faible sur le parcours.
-const CACHE = 'mongolf-v5';
+const CACHE = 'mongolf-v6';
 const SHELL = ['./', 'index.html', 'style.css', 'icons.js', 'app.js', 'lib/maplibre-gl.js', 'lib/maplibre-gl.css', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'courses/index.json'];
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener('activate', (e) => e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
