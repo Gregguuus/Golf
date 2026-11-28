@@ -5,11 +5,12 @@ import { mkdir, writeFile, readdir, unlink } from 'node:fs/promises';
 
 const LAT = +(process.argv[2] || 49.1145), LON = +(process.argv[3] || 2.422), KM = +(process.argv[4] || 50);
 const ENDPOINTS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+const DEADLINE = Date.now() + (+process.env.MAX_MINUTES || 140) * 60000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const r5 = (x) => Math.round(x * 1e5) / 1e5;
 
 async function overpass(q) {
-  for (let attempt = 0; attempt < 6; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     const url = ENDPOINTS[attempt % ENDPOINTS.length];
     try {
       const res = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q),
@@ -17,7 +18,7 @@ async function overpass(q) {
       if (res.ok) return await res.json();
       console.warn(url, res.status);
     } catch (e) { console.warn(url, e.message); }
-    await sleep(5000 * (attempt + 1));
+    await sleep(4000 * (attempt + 1));
   }
   throw new Error('Overpass indisponible');
 }
@@ -42,7 +43,10 @@ async function main() {
   await mkdir('courses', { recursive: true });
   for (const f of await readdir('courses')) if (f.endsWith('.json')) await unlink('courses/' + f);
   const index = [];
+  // Golfs les plus proches d'abord : s'il faut s'arrêter, on garde l'essentiel
+  courses.sort((a, b) => Math.hypot(a.center.lat - LAT, a.center.lon - LON) - Math.hypot(b.center.lat - LAT, b.center.lon - LON));
   for (const c of courses) {
+    if (Date.now() > DEADLINE) { console.warn('Temps écoulé : enregistrement des golfs déjà traités'); break; }
     const id = `${c.type[0]}${c.id}`;
     let data;
     try {
@@ -69,7 +73,7 @@ async function main() {
     index.push({ id, file, name: c.tags.name, city: out.city, lat: r5(c.center?.lat ?? (b[0] + b[2]) / 2), lon: r5(c.center?.lon ?? (b[1] + b[3]) / 2), bbox: b,
       holes: out.holes.length, mapped: out.holes.filter((h) => h.par).length });
     console.log(`${c.tags.name}: ${out.holes.length} trous, ${out.greens.length} greens`);
-    await sleep(1500);
+    await sleep(800);
   }
   index.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
   await writeFile('courses/index.json', JSON.stringify({ built: new Date().toISOString(), center: [LAT, LON], km: KM, courses: index }));
