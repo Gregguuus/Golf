@@ -44,6 +44,8 @@ async function main() {
   for (const f of await readdir('courses')) if (f.endsWith('.json')) await unlink('courses/' + f);
   const index = [];
   // Golfs les plus proches d'abord : s'il faut s'arrêter, on garde l'essentiel
+  const ctr = (c) => c.center || (c.bounds ? { lat: (c.bounds.minlat + c.bounds.maxlat) / 2, lon: (c.bounds.minlon + c.bounds.maxlon) / 2 } : { lat: LAT, lon: LON });
+  for (const c of courses) c.center = ctr(c);
   courses.sort((a, b) => Math.hypot(a.center.lat - LAT, a.center.lon - LON) - Math.hypot(b.center.lat - LAT, b.center.lon - LON));
   for (const c of courses) {
     if (Date.now() > DEADLINE) { console.warn('Temps écoulé : enregistrement des golfs déjà traités'); break; }
