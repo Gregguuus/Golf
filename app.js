@@ -563,8 +563,7 @@ function vToday() {
     + cta + `<div class="mt"></div>` + heroHTML()
     + (carousel ? `<h2 class="sec">Golfs à proximité <button data-a="tab" data-t="round">Tout voir</button></h2><div class="gcs">${carousel}</div>` : '')
     + `<h2 class="sec">Ma saison</h2>` + tiles([[best, 'Meilleur score'], [db.rounds.length, 'Parties'],
-      [(sum(db.sessions.filter((s) => s.date.startsWith(month)), (s) => s.duration) / 60).toFixed(1).replace('.', ',') + ' h', 'Entraînement ce mois']])
-    + `<button class="pro-banner" data-a="pro"><div class="pro-mark">PRO</div><div class="main"><div class="t">Mon Golf Pro</div><div class="s">Plan GPS, viseur, suivi des coups, ralenti 240 i/s</div></div>${I.chev}</button>`;
+      [(sum(db.sessions.filter((s) => s.date.startsWith(month)), (s) => s.duration) / 60).toFixed(1).replace('.', ',') + ' h', 'Entraînement ce mois']]);
 }
 function roundRow(x) {
   const d = rDiff(x);
@@ -677,7 +676,6 @@ function sheetSettings() {
         <button class="row" data-a="export"><div class="main"><div class="t" style="color:var(--accent)">Exporter une sauvegarde</div></div></button>
         <label class="row"><div class="main"><div class="t" style="color:var(--accent)">Restaurer une sauvegarde</div></div><input type="file" id="import" accept="application/json,.json" hidden></label></div>
       <div class="gh">Mon Golf</div><div class="group plain">
-        <button class="row" data-a="pro"><div class="main"><div class="t">Mon Golf Pro</div></div><span class="pill pro-pill">Accès anticipé</span>${I.chev}</button>
         <button class="row" data-a="legal" data-k="privacy"><div class="main"><div class="t">Confidentialité</div></div>${I.chev}</button>
         <button class="row" data-a="legal" data-k="terms"><div class="main"><div class="t">Conditions d'utilisation</div></div>${I.chev}</button>
         <button class="row" data-a="onboarding"><div class="main"><div class="t">Revoir la présentation</div></div>${I.chev}</button></div>
@@ -762,26 +760,15 @@ function sheetRoundMenu() {
 }
 
 const APP_VERSION = '1.0';
-function sheetPro() {
-  const f = [['target', 'Plan GPS satellite', 'Chaque trou en vue satellite, distances début, centre et fond de green, point de visée.'],
-    ['cam', 'Viseur caméra', 'Le drapeau en réalité augmentée et un télémètre optique.'],
-    ['ball', 'Suivi des coups', 'Chaque coup localisé au GPS, détection du swing par les capteurs de l\'iPhone.'],
-    ['video', 'Ralenti 240 i/s', 'Revoyez votre swing jusqu\'à ×1/16, image par image.'],
-    ['list', 'Statistiques', 'Score, putts, évolution partie après partie.']];
-  openSheet(sheetHead('', '', 'Fermer') + `<div class="pro-hero"><div class="pro-mark big">PRO</div><h2>Mon Golf Pro</h2><p>Tout ce qu'il faut pour jouer mieux, sur votre iPhone.</p></div>
-    <div class="group plain">${f.map(([ic, t, d]) => `<div class="row"><div class="ic pro-ic">${I[ic]}</div><div class="main"><div class="t">${t}</div><div class="s" style="white-space:normal">${d}</div></div></div>`).join('')}</div>
-    <div class="card pad mt" style="text-align:center"><div class="muted" style="font-size:14px">Pendant l'accès anticipé</div><div style="font-size:28px;font-weight:800;margin:4px 0">Gratuit</div><div class="muted" style="font-size:14px">Toutes les fonctions Pro sont incluses.</div></div>
-    <div class="btns"><button class="btn gold" data-a="close">Continuer avec l'accès anticipé</button></div>`);
-}
 const LEGAL = {
   privacy: ['Confidentialité', `<p><b>Vos données restent sur votre iPhone.</b> Parties, séances, coups et vidéos sont enregistrés uniquement dans le stockage de l'application sur votre appareil. Aucun compte, aucun serveur Mon Golf.</p>
     <p><b>Localisation.</b> Votre position sert à calculer les distances et à reconnaître le golf. Elle est envoyée arrondie (environ 100 m) au service météo Open-Meteo, et à Photon (OpenStreetMap) uniquement quand vous cherchez un golf.</p>
     <p><b>Caméra et capteurs.</b> Utilisés seulement quand vous ouvrez le viseur, filmez un swing ou activez la détection des coups. Rien n'est envoyé.</p>
     <p><b>Imagerie satellite.</b> Les images sont chargées depuis les serveurs d'Esri.</p>
     <p>Pour tout effacer : supprimez l'application de l'écran d'accueil et les données du site dans Réglages → Safari.</p>`],
-  terms: ['Conditions d\'utilisation', `<p>Mon Golf est fourni en accès anticipé, sans garantie. Les distances sont indicatives : elles dépendent de la précision du GPS (± 3 à 5 m) et des plans OpenStreetMap.</p>
+  terms: ['Conditions d\'utilisation', `<p>Mon Golf est une application personnelle, fournie sans garantie. Les distances sont indicatives : elles dépendent de la précision du GPS (± 3 à 5 m) et des plans OpenStreetMap.</p>
     <p>Respectez les règles de votre club et l'étiquette du golf ; n'utilisez pas l'application si elle ralentit le jeu.</p>
-    <p>Données des golfs © contributeurs OpenStreetMap (licence ODbL). Météo : Open-Meteo. Imagerie : Esri, Maxar. Ces services sont utilisés dans le cadre de leurs offres gratuites.</p>`],
+    <p>Données des golfs © contributeurs OpenStreetMap (licence ODbL). Météo : Open-Meteo. Imagerie : Esri, Maxar.</p>`],
 };
 function sheetLegal(k) { const [t, body] = LEGAL[k]; openSheet(sheetHead(t) + `<div class="card pad legal">${body}</div>`); }
 
@@ -879,7 +866,6 @@ const A = {
   shot: () => addShot(false),
   motion: toggleMotion,
   recenter: () => showHole(true),
-  pro: () => { closeSheet(); setTimeout(sheetPro, 50); },
   legal: (b) => sheetLegal(b.dataset.k),
   onboarding: () => { closeSheet(); onbStep = 0; showOnboarding(); },
   'onb-next': () => { onbStep++; showOnboarding(); },
