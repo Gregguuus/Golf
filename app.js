@@ -1,6 +1,7 @@
 /* Mon Golf — application web statique (GitHub Pages), sans compte ni serveur.
-   Données : localStorage (parties, séances, rappels, signets) + IndexedDB (vidéos de swing).
-   Services gratuits sans clé : Open-Meteo (météo) et OpenStreetMap / Overpass (golfs et cartes de score). */
+   Données : localStorage (parties, séances) + IndexedDB (vidéos de swing).
+   Base des golfs : courses/*.json, construite depuis OpenStreetMap par GitHub Actions.
+   Services gratuits : Open-Meteo (météo), imagerie satellite Esri, Photon (recherche de golfs). */
 'use strict';
 
 /* ================= Utilitaires ================= */
@@ -12,115 +13,189 @@ const pad2 = (n) => String(n).padStart(2, '0');
 const isoDay = (d = new Date()) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const fmtDay = (d, o = { day: 'numeric', month: 'short' }) => new Date(d).toLocaleDateString('fr-FR', o);
 const sum = (a, f) => a.reduce((t, x) => t + (f(x) || 0), 0);
-const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const HOME = { lat: 49.1145, lon: 2.422 }; // Luzarches : centre de la base des golfs
 
-const I = {
-  today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>',
-  flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V3.5"/><path d="M6 4h11.5l-2.6 4.2 2.6 4.3H6"/><ellipse cx="9" cy="21" rx="5" ry="1" opacity=".5"/></svg>',
-  video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="2.5" y="6" width="13.5" height="12" rx="3"/><path d="m16 10.5 5.5-3v9l-5.5-3z"/></svg>',
-  train: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h3.5l2.5-7 6 14 2.5-7H21"/></svg>',
-  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 0 1 12 0c0 6.5 2.5 8 2.5 8h-17S6 15.5 6 9Z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>',
-  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>',
-  chev: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>',
-  pin: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/></svg>',
-  nav: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3 3 10.5l7.5 2.9L13.5 21z"/></svg>',
-  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V4M6 10l6-6 6 6"/></svg>',
-  bulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z"/></svg>',
-  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
-  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>',
-  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V4.5h5V7M6 7l1 13h10l1-13"/></svg>',
-  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
-  insta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="3" width="18" height="18" rx="5.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none"/></svg>',
-  cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h2l1.6-2h5.8l1.6 2h2A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/><circle cx="12" cy="13" r="4"/></svg>',
-  upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3.5M7 8l5-5 5 5M4 14v4.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V14"/></svg>',
-  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
-  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></svg>',
-  book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5zM4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/></svg>',
-};
+/* ================= Géométrie ================= */
+const RAD = Math.PI / 180, R_EARTH = 6371000;
+function dist(a, b) { // mètres ; points {lat, lon}
+  const dLa = (b.lat - a.lat) * RAD, dLo = (b.lon - a.lon) * RAD;
+  const x = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * RAD) * Math.cos(b.lat * RAD) * Math.sin(dLo / 2) ** 2;
+  return 2 * R_EARTH * Math.asin(Math.sqrt(x));
+}
+function bearing(a, b) {
+  const y = Math.sin((b.lon - a.lon) * RAD) * Math.cos(b.lat * RAD);
+  const x = Math.cos(a.lat * RAD) * Math.sin(b.lat * RAD) - Math.sin(a.lat * RAD) * Math.cos(b.lat * RAD) * Math.cos((b.lon - a.lon) * RAD);
+  return (Math.atan2(y, x) / RAD + 360) % 360;
+}
+function dest(a, brg, m) {
+  const d = m / R_EARTH, t = brg * RAD, la = a.lat * RAD, lo = a.lon * RAD;
+  const la2 = Math.asin(Math.sin(la) * Math.cos(d) + Math.cos(la) * Math.sin(d) * Math.cos(t));
+  const lo2 = lo + Math.atan2(Math.sin(t) * Math.sin(d) * Math.cos(la), Math.cos(d) - Math.sin(la) * Math.sin(la2));
+  return { lat: la2 / RAD, lon: lo2 / RAD };
+}
+const P = ([lat, lon]) => ({ lat, lon });
+const LL = (p) => [p.lon, p.lat]; // vers [lon, lat] pour la carte
+function centroid(poly) { return { lat: sum(poly, (p) => p[0]) / poly.length, lon: sum(poly, (p) => p[1]) / poly.length }; }
+function inPoly(pt, poly) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [yi, xi] = poly[i], [yj, xj] = poly[j];
+    if ((yi > pt.lat) !== (yj > pt.lat) && pt.lon < ((xj - xi) * (pt.lat - yi)) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+const inBox = (p, b, m = 0.002) => p.lat > b[0] - m && p.lat < b[2] + m && p.lon > b[1] - m && p.lon < b[3] + m;
 
 /* ================= Données ================= */
 const KEY = 'mongolf';
-const DEFAULTS = () => ({ v: 2, sessions: [], rounds: [], activeRound: null, insta: [], instaCollection: '', reminders: [], courses: {},
-  settings: { auto: true, wake: true } });
+const DEFAULTS = () => ({ v: 3, sessions: [], rounds: [], activeRound: null, courses: {}, settings: { auto: true, wake: true, motion: false } });
 let db;
 function load() {
   let d = {};
   try { d = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch {}
   db = Object.assign(DEFAULTS(), d);
   db.settings = Object.assign(DEFAULTS().settings, d.settings);
-  delete db.clubs; // ancienne version : distances par club supprimées
-  if (db.v !== 2) { // migration v1 -> v2 (ancien format de partie)
-    db.rounds = (db.rounds || []).map(migrateRound).filter(Boolean);
-    db.activeRound = migrateRound(db.activeRound);
-    db.v = 2;
-  }
+  for (const k of ['clubs', 'insta', 'instaCollection', 'reminders']) delete db[k];
+  if ((d.v || 1) < 2) { db.rounds = (db.rounds || []).map(migrateRound).filter(Boolean); db.activeRound = migrateRound(db.activeRound); }
+  db.v = 3;
 }
 function migrateRound(r) {
   if (!r) return null;
-  if (r.holes && Array.isArray(r.holes)) return r;
+  if (Array.isArray(r.holes)) return r;
   return { id: r.id, date: r.date, course: r.course, courseKey: null, source: 'user', complete: !!r.complete,
-    holes: (r.scores || []).map((s) => ({ par: s.par, hcp: null, dist: null, strokes: s.strokes || 0, putts: s.putts || 0, fw: s.fw === 'yes' ? 'c' : s.fw === 'no' ? 'l' : null })) };
+    holes: (r.scores || []).map((s) => ({ par: s.par, hcp: null, dist: null, strokes: s.strokes || 0, putts: s.putts || 0, shots: [] })) };
 }
-function save() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { toast('Mémoire pleine : exportez vos données'); } }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { toast('Mémoire pleine : exportez vos données'); } }
 load();
 
 /* Vidéos (IndexedDB) */
 let idbP;
-function idb() {
-  return (idbP ||= new Promise((res, rej) => {
-    const r = indexedDB.open('mongolf-videos', 1);
-    r.onupgradeneeded = () => r.result.createObjectStore('swings', { keyPath: 'id' });
-    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-  }));
-}
+const idb = () => (idbP ||= new Promise((res, rej) => {
+  const r = indexedDB.open('mongolf-videos', 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('swings', { keyPath: 'id' });
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+}));
 const reqP = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 const vStore = async (m) => (await idb()).transaction('swings', m).objectStore('swings');
 const vPut = async (x) => reqP((await vStore('readwrite')).put(x));
 const vAll = async () => reqP((await vStore('readonly')).getAll());
 const vDel = async (id) => reqP((await vStore('readwrite')).delete(id));
 
-/* ================= État de l'interface ================= */
-const S = { tab: 'today', pos: null, posErr: null, weather: null, golf: null, nearby: null, nearbyErr: false, search: '', searchRes: null,
-  hole: 0, trainSeg: 'journal', instaCat: 'Tous', swings: [], cam: null, rec: null, recStart: 0 };
+/* ================= État ================= */
+const S = { tab: 'today', pos: null, posErr: null, weather: null, here: null, index: null, search: '', photon: null,
+  hole: 0, swings: [], cam: null, rec: null, recStart: 0, play: false };
 
 /* ================= Toast & feuilles ================= */
 let toastT;
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2600); }
+function toast(msg, action, fn) {
+  const t = $('#toast');
+  t.innerHTML = esc(msg) + (action ? ` <button>${esc(action)}</button>` : '');
+  if (action) $('button', t).onclick = () => { t.classList.remove('on'); fn(); };
+  t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), action ? 6000 : 2600);
+}
 let sheetClose = null;
 function openSheet(html, onClose) {
   const s = $('#sheet'); s.innerHTML = '<div class="grab"></div>' + html; s.scrollTop = 0;
   requestAnimationFrame(() => { s.classList.add('on'); $('#backdrop').classList.add('on'); });
   sheetClose = onClose || null;
 }
-function closeSheet() {
-  $('#sheet').classList.remove('on'); $('#backdrop').classList.remove('on');
-  const f = sheetClose; sheetClose = null; f && f();
-}
+function closeSheet() { $('#sheet').classList.remove('on'); $('#backdrop').classList.remove('on'); const f = sheetClose; sheetClose = null; f && f(); }
 $('#backdrop').addEventListener('click', closeSheet);
-const sheetHead = (title, right = '', left = 'Annuler') =>
+const sheetHead = (title, right = '', left = 'Fermer') =>
   `<div class="sheet-head"><button data-a="close">${left}</button><h2>${title}</h2>${right ? `<button class="r" ${right}</button>` : '<span></span>'}</div>`;
+
+/* ================= Base des golfs ================= */
+async function loadIndex() {
+  try { const r = await fetch('courses/index.json', { cache: 'no-cache' }); if (!r.ok) throw 0; S.index = (await r.json()).courses; }
+  catch { S.index = []; }
+  detectHere(); if (!S.play) render();
+}
+const courseCache = {};
+async function loadCourse(entry) {
+  if (courseCache[entry.id]) return courseCache[entry.id];
+  const r = await fetch('courses/' + entry.file); if (!r.ok) throw new Error('course');
+  return (courseCache[entry.id] = await r.json());
+}
+const ref = () => S.pos || HOME;
+function sortedCourses() {
+  if (!S.index) return [];
+  return S.index.map((c) => ({ ...c, d: dist(ref(), c) })).sort((a, b) => a.d - b.d);
+}
+function detectHere() {
+  if (!S.pos || !S.index) return;
+  const prev = S.here;
+  S.here = S.index.find((c) => c.bbox && inBox(S.pos, c.bbox, 0.0008)) || null;
+  if (S.here && (!prev || prev.id !== S.here.id)) onArrive(S.here);
+}
+/* Groupes de trous (golfs de 27 ou 36 trous) */
+function holeGroups(course) {
+  const by = new Map();
+  for (const h of course.holes) { const g = h.grp || ''; if (!by.has(g)) by.set(g, []); by.get(g).push(h); }
+  let groups = [...by.entries()].map(([name, hs]) => ({ name, holes: hs }));
+  // Sans nom de parcours mais des numéros en double : on répartit en plusieurs parcours
+  if (groups.length === 1 && new Set(groups[0].holes.map((h) => h.ref)).size < groups[0].holes.length) {
+    const out = [];
+    for (const h of [...course.holes].sort((a, b) => a.ref - b.ref)) { const i = out.findIndex((g) => !g.some((x) => x.ref === h.ref)); (i >= 0 ? out[i] : (out[out.length] = [])).push(h); }
+    groups = out.map((hs, i) => ({ name: `Parcours ${i + 1}`, holes: hs }));
+  }
+  groups.forEach((g) => g.holes.sort((a, b) => a.ref - b.ref));
+  return groups.filter((g) => g.holes.length >= 3);
+}
+function holeGeo(course, h) {
+  const tee = P(h.line[0]), end = P(h.line[h.line.length - 1]);
+  let green = null, best = 70;
+  for (const g of course.greens || []) {
+    if (inPoly(end, g)) { green = g; break; }
+    const d = dist(centroid(g), end); if (d < best) { best = d; green = g; }
+  }
+  return { tee, center: green ? centroid(green) : end, green, line: h.line.map(P) };
+}
+
+/* ================= Localisation ================= */
+let watchId = null;
+function startGPS() {
+  if (!navigator.geolocation || watchId != null) return;
+  watchId = navigator.geolocation.watchPosition((p) => {
+    const first = !S.pos;
+    S.pos = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, speed: p.coords.speed };
+    S.posErr = null;
+    if (first) { fetchWeather(); if (!S.play) render(); }
+    detectHere();
+    if (S.play) updatePlay();
+  }, (e) => { S.posErr = e; }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+}
+let arrivedOnce = false;
+async function onArrive(c) {
+  if (arrivedOnce) return; arrivedOnce = true;
+  if (db.activeRound) { go('round'); if (db.activeRound.mapped) openPlay(); return; }
+  const played = db.rounds.some((r) => r.date === isoDay() && r.courseKey === c.id);
+  if (!db.settings.auto || played) { if (!S.play) render(); return; }
+  if (c.mapped >= 9) {
+    const course = await loadCourse(c).catch(() => null), groups = course ? holeGroups(course) : [];
+    if (groups.length === 1) { startRound(c, course, groups[0]); go('round'); openPlay(); toast(`Bienvenue à ${c.name} ⛳`); return; }
+  }
+  go('round'); sheetCourse(c);
+}
 
 /* ================= Météo ================= */
 const WMO = { 0: ['☀️', 'Ensoleillé'], 1: ['🌤️', 'Plutôt ensoleillé'], 2: ['⛅', 'Éclaircies'], 3: ['☁️', 'Couvert'], 45: ['🌫️', 'Brouillard'], 48: ['🌫️', 'Brouillard givrant'],
-  51: ['🌦️', 'Bruine légère'], 53: ['🌦️', 'Bruine'], 55: ['🌧️', 'Bruine forte'], 56: ['🌧️', 'Bruine verglaçante'], 57: ['🌧️', 'Bruine verglaçante'],
-  61: ['🌦️', 'Pluie faible'], 63: ['🌧️', 'Pluie'], 65: ['🌧️', 'Forte pluie'], 66: ['🌧️', 'Pluie verglaçante'], 67: ['🌧️', 'Pluie verglaçante'],
-  71: ['🌨️', 'Neige faible'], 73: ['🌨️', 'Neige'], 75: ['❄️', 'Forte neige'], 77: ['🌨️', 'Grésil'], 80: ['🌦️', 'Averses'], 81: ['🌧️', 'Averses'],
-  82: ['⛈️', 'Fortes averses'], 85: ['🌨️', 'Averses de neige'], 86: ['🌨️', 'Averses de neige'], 95: ['⛈️', 'Orage'], 96: ['⛈️', 'Orage, grêle'], 99: ['⛈️', 'Orage, grêle'] };
+  51: ['🌦️', 'Bruine légère'], 53: ['🌦️', 'Bruine'], 55: ['🌧️', 'Bruine forte'], 61: ['🌦️', 'Pluie faible'], 63: ['🌧️', 'Pluie'], 65: ['🌧️', 'Forte pluie'],
+  71: ['🌨️', 'Neige faible'], 73: ['🌨️', 'Neige'], 75: ['❄️', 'Forte neige'], 80: ['🌦️', 'Averses'], 81: ['🌧️', 'Averses'], 82: ['⛈️', 'Fortes averses'],
+  95: ['⛈️', 'Orage'], 96: ['⛈️', 'Orage, grêle'], 99: ['⛈️', 'Orage, grêle'] };
 const wmo = (c) => WMO[c] || ['🌡️', '—'];
 const dirName = (d) => ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'][Math.round(d / 45) % 8];
 async function fetchWeather() {
-  if (!S.pos) return;
-  const u = new URL('https://api.open-meteo.com/v1/forecast');
-  Object.entries({ latitude: S.pos.lat.toFixed(4), longitude: S.pos.lon.toFixed(4), timezone: 'auto', wind_speed_unit: 'kmh', forecast_hours: 8,
+  const p = ref(), u = new URL('https://api.open-meteo.com/v1/forecast');
+  Object.entries({ latitude: p.lat.toFixed(3), longitude: p.lon.toFixed(3), timezone: 'auto', wind_speed_unit: 'kmh', forecast_hours: 8,
     current: 'temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m',
     hourly: 'temperature_2m,precipitation_probability,weather_code,wind_speed_10m' }).forEach(([k, v]) => u.searchParams.set(k, v));
-  try { const r = await fetch(u); if (!r.ok) throw 0; S.weather = await r.json(); } catch { S.weather = S.weather || 'err'; }
-  softRender();
+  try { const r = await fetch(u); if (!r.ok) throw 0; S.weather = await r.json(); } catch { S.weather ||= 'err'; }
+  if (S.play) updatePlay(); else if (S.tab === 'today') render();
 }
 function golfTip(c) {
   if ([95, 96, 99].includes(c.weather_code)) return 'Orage : quittez le parcours et mettez-vous à l\'abri.';
   const t = [];
-  if (c.wind_speed_10m >= 30) t.push('Vent fort : jouez des balles basses, jusqu\'à 2 clubs de plus face au vent.');
+  if (c.wind_speed_10m >= 30) t.push('Vent fort : balles basses, jusqu\'à 2 clubs de plus face au vent.');
   else if (c.wind_speed_10m >= 15) t.push('Vent sensible : 1 club de plus face au vent, 1 de moins dans le dos.');
   if (c.wind_gusts_10m - c.wind_speed_10m >= 15) t.push('Rafales : attendez une accalmie avant de frapper.');
   if (c.temperature_2m <= 8) t.push('Froid : la balle porte moins, prévoyez un club de plus.');
@@ -129,133 +204,18 @@ function golfTip(c) {
   return t.join(' ') || 'Conditions idéales pour jouer. Bon parcours !';
 }
 function heroHTML() {
-  const w = S.weather;
-  const place = S.golf ? S.golf.name : S.pos ? 'Ma position' : 'Météo';
-  if (!w || w === 'err') {
-    const msg = S.posErr ? 'Autorisez la localisation pour la météo en direct.' : w === 'err' ? 'Météo indisponible pour le moment.' : 'Chargement…';
-    return `<div class="hero loading"><div class="place">${I.nav}${esc(place)}</div><div class="now"><div><div class="temp">--°</div><div class="cond">${msg}</div></div></div></div>`;
-  }
-  const c = w.current, [emo, label] = wmo(c.weather_code), h = w.hourly;
-  const now = Date.now();
+  const w = S.weather, place = S.here ? S.here.name : S.pos ? 'Ma position' : 'Luzarches';
+  if (!w || w === 'err') return `<div class="hero loading"><div class="place">${I.nav}${esc(place)}</div><div class="now"><div><div class="temp">--°</div><div class="cond">${w === 'err' ? 'Météo indisponible pour le moment.' : 'Chargement…'}</div></div></div></div>`;
+  const c = w.current, [emo, label] = wmo(c.weather_code), h = w.hourly, now = Date.now();
   const hrs = h.time.map((t, i) => ({ t: new Date(t), i })).filter((x) => x.t.getTime() > now - 3600e3).slice(0, 6);
   const rain = hrs.length ? h.precipitation_probability[hrs[0].i] ?? 0 : 0;
-  const rot = (c.wind_direction_10m + 180) % 360;
-  return `<div class="hero">
-    <div class="place">${I.nav}${esc(place)}</div>
+  const u = (s) => `<small style="display:inline;font-size:12px">${s}</small>`;
+  return `<div class="hero"><div class="place">${I.nav}${esc(place)}</div>
     <div class="now"><div><div class="temp">${Math.round(c.temperature_2m)}°</div><div class="cond">${label} · ressenti ${Math.round(c.apparent_temperature)}°</div></div><div class="emo">${emo}</div></div>
-    <div class="metrics">
-      <div><small>Vent ${dirName(c.wind_direction_10m)}</small><b><span class="arrow" style="transform:rotate(${rot}deg)">${I.arrow}</span>${Math.round(c.wind_speed_10m)}<small style="display:inline;font-size:12px">km/h</small></b></div>
-      <div><small>Rafales</small><b>${Math.round(c.wind_gusts_10m)}<small style="display:inline;font-size:12px">km/h</small></b></div>
-      <div><small>Pluie</small><b>${rain}<small style="display:inline;font-size:12px">%</small></b></div>
-    </div>
+    <div class="metrics"><div><small>Vent ${dirName(c.wind_direction_10m)}</small><b><span class="arrow" style="transform:rotate(${(c.wind_direction_10m + 180) % 360}deg)">${I.arrow}</span>${Math.round(c.wind_speed_10m)}${u('km/h')}</b></div>
+      <div><small>Rafales</small><b>${Math.round(c.wind_gusts_10m)}${u('km/h')}</b></div><div><small>Pluie</small><b>${rain}${u('%')}</b></div></div>
     <div class="tip">${I.bulb}<span>${golfTip(c)}</span></div>
-    <div class="hours">${hrs.map(({ t, i }, k) => `<div><i>${k === 0 ? 'Maint.' : t.getHours() + ' h'}</i><span>${wmo(h.weather_code[i])[0]}</span>${Math.round(h.temperature_2m[i])}°<i>${Math.round(h.wind_speed_10m[i])} km/h</i></div>`).join('')}</div>
-  </div>`;
-}
-
-/* ================= OpenStreetMap : golfs et trous ================= */
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
-async function overpass(q) {
-  for (const url of OVERPASS) {
-    try {
-      const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-      if (r.ok) return await r.json();
-    } catch {}
-  }
-  throw new Error('overpass');
-}
-function km(a, b) {
-  const R = 6371, dLa = (b.lat - a.lat) * Math.PI / 180, dLo = (b.lon - a.lon) * Math.PI / 180;
-  const x = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLo / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(x));
-}
-const toCourse = (e) => ({ key: `${e.type}/${e.id}`, type: e.type, id: e.id, name: e.tags?.name, city: e.tags?.['addr:city'] || '',
-  lat: e.center?.lat ?? e.lat, lon: e.center?.lon ?? e.lon });
-async function fetchNearby() {
-  if (!S.pos) return;
-  const { lat, lon } = S.pos;
-  try {
-    const j = await overpass(`[out:json][timeout:25];(way["leisure"="golf_course"](around:40000,${lat},${lon});relation["leisure"="golf_course"](around:40000,${lat},${lon}););out tags center;`);
-    S.nearby = j.elements.map(toCourse).filter((c) => c.name && c.lat).map((c) => ({ ...c, d: km(S.pos, c) })).sort((a, b) => a.d - b.d).slice(0, 25);
-  } catch { S.nearbyErr = true; }
-  renderCourseList();
-}
-let searchT, searchSeq = 0;
-function searchCourses(q) {
-  clearTimeout(searchT);
-  S.search = q;
-  if (q.trim().length < 3) { S.searchRes = null; renderCourseList(); return; }
-  S.searchRes = 'loading'; renderCourseList();
-  searchT = setTimeout(async () => {
-    const seq = ++searchSeq;
-    const re = q.trim().replace(/[\\"^$.|?*+()[\]{}]/g, '');
-    const scope = S.pos ? `(around:250000,${S.pos.lat},${S.pos.lon})` : '(area.fr)';
-    const pre = S.pos ? '' : 'area["ISO3166-1"="FR"][admin_level=2]->.fr;';
-    try {
-      const j = await overpass(`[out:json][timeout:25];${pre}(way["leisure"="golf_course"]["name"~"${re}",i]${scope};relation["leisure"="golf_course"]["name"~"${re}",i]${scope};);out tags center 30;`);
-      if (seq !== searchSeq) return;
-      S.searchRes = j.elements.map(toCourse).filter((c) => c.name).map((c) => ({ ...c, d: S.pos && c.lat ? km(S.pos, c) : null }));
-    } catch { if (seq === searchSeq) S.searchRes = 'err'; }
-    renderCourseList();
-  }, 500);
-}
-function parseHoles(els) {
-  const by = new Map();
-  for (const e of els) {
-    const t = e.tags || {}, n = parseInt(t.ref, 10);
-    if (!n || n > 27 || by.has(n)) continue;
-    const dk = ['dist:yellow', 'dist:white', 'dist:blue', 'dist:red'].find((k) => t[k]) || Object.keys(t).find((k) => /^dist(:|$)|^distance$/.test(k));
-    by.set(n, { par: parseInt(t.par, 10) || null, hcp: parseInt(t.handicap, 10) || null, dist: dk ? parseInt(t[dk], 10) || null : null });
-  }
-  const max = Math.max(0, ...by.keys());
-  if (max < 9) return null;
-  const n = max >= 18 ? 18 : 9;
-  const holes = Array.from({ length: n }, (_, i) => by.get(i + 1) || { par: null, hcp: null, dist: null });
-  if (holes.filter((h) => h.par).length < n * 0.6) return null;
-  return holes.map((h) => ({ ...h, par: h.par || 4 }));
-}
-async function loadCourseHoles(c) {
-  const saved = db.courses[c.key];
-  if (saved?.source === 'osm') return saved;
-  try {
-    const j = await overpass(`[out:json][timeout:25];${c.type}(${c.id});map_to_area->.a;way["golf"="hole"](area.a);out tags;`);
-    const holes = parseHoles(j.elements);
-    if (holes) { db.courses[c.key] = { name: c.name, holes, source: 'osm' }; save(); return db.courses[c.key]; }
-  } catch {}
-  return saved || null; // pars saisis lors d'une partie précédente, sinon rien
-}
-
-/* ================= Localisation & détection du golf ================= */
-function getPos() {
-  return new Promise((res, rej) => {
-    if (!navigator.geolocation) return rej(new Error('geo'));
-    navigator.geolocation.getCurrentPosition((p) => res({ lat: p.coords.latitude, lon: p.coords.longitude }), rej, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
-  });
-}
-async function locate() {
-  try { S.pos = await getPos(); S.posErr = null; } catch (e) { S.posErr = e; softRender(); return; }
-  fetchWeather();
-  if (!S.nearby) fetchNearby();
-  try {
-    const { lat, lon } = S.pos;
-    const j = await overpass(`[out:json][timeout:20];(way["leisure"="golf_course"](around:120,${lat},${lon});relation["leisure"="golf_course"](around:120,${lat},${lon}););out tags center 1;`);
-    const e = j.elements[0];
-    S.golf = e ? toCourse({ ...e, tags: { ...e.tags, name: e.tags?.name || 'Golf' } }) : null;
-  } catch { /* garde la détection précédente */ }
-  if (S.golf) onGolf(S.golf);
-  softRender();
-}
-let golfHandled = false;
-async function onGolf(c) {
-  if (golfHandled) return;
-  golfHandled = true;
-  if (db.activeRound) { go('round'); return; }
-  const played = db.rounds.some((r) => r.date === isoDay() && r.courseKey === c.key);
-  if (db.settings.auto && !played) {
-    await startRound(c, null);
-    go('round');
-    toast(`Bienvenue à ${c.name} ⛳`);
-  }
+    <div class="hours">${hrs.map(({ t, i }, k) => `<div><i>${k === 0 ? 'Maint.' : t.getHours() + ' h'}</i><span>${wmo(h.weather_code[i])[0]}</span>${Math.round(h.temperature_2m[i])}°<i>${Math.round(h.wind_speed_10m[i])} km/h</i></div>`).join('')}</div></div>`;
 }
 
 /* ================= Partie ================= */
@@ -263,30 +223,45 @@ const scoreName = (s, p) => {
   if (!s) return ['', ''];
   const d = s - p;
   if (s === 1) return ['Trou en un !', 'eagle'];
-  return d <= -3 ? ['Albatros', 'eagle'] : d === -2 ? ['Eagle', 'eagle'] : d === -1 ? ['Birdie', 'birdie'] : d === 0 ? ['Par', 'par'] : d === 1 ? ['Bogey', 'bogey'] : d === 2 ? ['Double bogey', 'double'] : [`+${d}`, 'double'];
+  return d <= -2 ? [d === -2 ? 'Eagle' : 'Albatros', 'eagle'] : d === -1 ? ['Birdie', 'birdie'] : d === 0 ? ['Par', 'par'] : d === 1 ? ['Bogey', 'bogey'] : d === 2 ? ['Double bogey', 'double'] : [`+${d}`, 'double'];
 };
 const toPar = (n) => (n === 0 ? 'E' : n > 0 ? '+' + n : '−' + Math.abs(n));
 const played = (r) => r.holes.filter((h) => h.strokes);
 const rStrokes = (r) => sum(r.holes, (h) => h.strokes);
 const rDiff = (r) => rStrokes(r) - sum(played(r), (h) => h.par);
+let curCourse = null; // géométrie du golf de la partie en cours
+const lineLen = (line) => { let t = 0; for (let i = 1; i < line.length; i++) t += dist(P(line[i - 1]), P(line[i])); return Math.round(t); };
 
-async function startRound(course, nHoles) {
-  let data = course.key ? await loadCourseHoles(course) : null;
-  let holes = data?.holes;
-  if (!holes) holes = Array.from({ length: nHoles || 18 }, () => ({ par: 4, hcp: null, dist: null }));
-  db.activeRound = { id: uid(), date: isoDay(), course: course.name || 'Parcours', courseKey: course.key || null, source: data?.source || 'none', complete: false,
-    holes: holes.map((h) => ({ par: h.par, hcp: h.hcp ?? null, dist: h.dist ?? null, strokes: 0, putts: 0, fw: null })) };
+function startRound(entry, course, group, nHoles = 18) {
+  const holes = group ? group.holes.map((h) => ({ par: h.par || 4, hcp: h.hcp, dist: h.dist || lineLen(h.line), gref: h.ref }))
+    : (db.courses[entry?.id || entry?.name]?.holes || Array.from({ length: nHoles }, () => ({ par: 4 })));
+  db.activeRound = { id: uid(), date: isoDay(), course: entry?.name || 'Parcours', courseKey: entry?.id || null, group: group?.name ?? '', mapped: !!group,
+    holes: holes.map((h) => ({ par: h.par || 4, hcp: h.hcp ?? null, dist: h.dist ?? null, gref: h.gref ?? null, strokes: 0, putts: 0, shots: [] })) };
+  curCourse = group ? course : null;
   S.hole = 0; save(); keepAwake();
+}
+async function ensureCourse() {
+  const r = db.activeRound;
+  if (!r?.mapped || curCourse) return;
+  if (!S.index) await loadIndex();
+  const e = S.index.find((c) => c.id === r.courseKey);
+  if (e) { try { curCourse = await loadCourse(e); } catch {} }
+}
+function roundHoleData(i) { // géométrie du trou i de la partie en cours
+  const r = db.activeRound; if (!r?.mapped || !curCourse) return null;
+  const gs = holeGroups(curCourse), g = gs.find((x) => x.name === r.group) || gs[0];
+  const h = g?.holes.find((x) => x.ref === r.holes[i].gref) || g?.holes[i];
+  return h ? holeGeo(curCourse, h) : null;
 }
 function finishRound() {
   const r = db.activeRound, missing = r.holes.filter((h) => !h.strokes).length;
   if (missing && !confirm(`${missing} trou(s) sans score. Terminer quand même ?`)) return;
   r.complete = !missing;
-  if (r.courseKey && r.source !== 'osm') db.courses[r.courseKey] = { name: r.course, holes: r.holes.map(({ par, hcp, dist }) => ({ par, hcp, dist })), source: 'user' };
-  db.rounds.unshift(r); db.activeRound = null; save(); releaseWake();
-  render(); toast(`Partie enregistrée : ${rStrokes(r)} (${toPar(rDiff(r))})`);
+  if (!r.mapped) db.courses[r.courseKey || r.course] = { holes: r.holes.map(({ par, hcp, dist: d }) => ({ par, hcp, dist: d })) };
+  db.rounds.unshift(r); db.activeRound = null; curCourse = null; save(); releaseWake(); closePlay();
+  toast(`Partie enregistrée : ${rStrokes(r)} (${toPar(rDiff(r))})`);
 }
-function markCls(h) { return h.strokes ? 'm-' + scoreName(h.strokes, h.par)[1] : ''; }
+const markCls = (h) => (h.strokes ? 'm-' + scoreName(h.strokes, h.par)[1] : '');
 function scorecardHTML(r, cur = -1) {
   const n = r.holes.length, halves = n === 18 ? [[0, 9, 'Aller'], [9, 18, 'Retour']] : [[0, n, 'Tot']];
   let head = '<th>Trou</th>', par = '<th>Par</th>', hcp = '<th>HCP</th>', sc = '<th>Score</th>', pu = '<th>Putts</th>';
@@ -305,283 +280,367 @@ function scorecardHTML(r, cur = -1) {
   return `<div class="sc-wrap"><table class="sc"><thead><tr>${head}</tr></thead><tbody><tr>${par}</tr>${hasHcp ? `<tr>${hcp}</tr>` : ''}<tr>${sc}</tr><tr>${pu}</tr></tbody></table></div>`;
 }
 
-/* ================= Rappels & calendrier ================= */
-const DAYS = [['MO', 'L'], ['TU', 'M'], ['WE', 'M'], ['TH', 'J'], ['FR', 'V'], ['SA', 'S'], ['SU', 'D']];
-const DAY_FR = { MO: 'lun', TU: 'mar', WE: 'mer', TH: 'jeu', FR: 'ven', SA: 'sam', SU: 'dim' };
-const ALERTS = [[0, 'À l\'heure'], [15, '15 min avant'], [30, '30 min avant'], [60, '1 h avant'], [120, '2 h avant'], [1440, 'La veille']];
-const icsDate = (d) => `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}T${pad2(d.getHours())}${pad2(d.getMinutes())}00`;
-function firstOccurrence(rem) {
-  const [hh, mm] = rem.time.split(':').map(Number);
-  if (rem.date) { const d = new Date(rem.date + 'T00:00'); d.setHours(hh, mm, 0, 0); return d; }
-  const idx = DAYS.map((x) => x[0]);
-  const d = new Date(); d.setHours(hh, mm, 0, 0);
-  for (let k = 0; k < 8; k++) {
-    const c = new Date(d); c.setDate(d.getDate() + k);
-    const code = idx[(c.getDay() + 6) % 7];
-    if (rem.days.includes(code) && c > new Date()) return c;
+/* ================= Plan GPS du trou ================= */
+const SAT = { version: 8, sources: { sat: { type: 'raster', tileSize: 256, maxzoom: 19, attribution: 'Imagerie © Esri, Maxar · Plans © OpenStreetMap',
+  tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'] } }, layers: [{ id: 'sat', type: 'raster', source: 'sat' }] };
+let targetManual = false, lastOrigin = null;
+let map = null, mapReady = false, mk = {}, target = null, geo = null, mapBearing = 0, arcLabels = [], shotLabels = [];
+const fc = (features) => ({ type: 'FeatureCollection', features });
+const lineF = (pts) => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pts.map(LL) } });
+const polyF = (poly, kind) => ({ type: 'Feature', properties: { kind }, geometry: { type: 'Polygon', coordinates: [poly.map(([a, b]) => [b, a])] } });
+function el(cls, html = '') { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; return d; }
+
+async function openPlay() {
+  if (!db.activeRound?.mapped) return;
+  S.play = true; document.body.classList.add('playing'); $('#play').classList.add('on');
+  await ensureCourse();
+  if (!roundHoleData(S.hole)) { toast('Plan de ce golf indisponible'); closePlay(); return; }
+  if (!map) initMap(); else { map.resize(); showHole(true); }
+}
+function closePlay() { S.play = false; document.body.classList.remove('playing'); $('#play').classList.remove('on'); render(); }
+function initMap() {
+  map = new maplibregl.Map({ container: 'map', style: SAT, center: LL(HOME), zoom: 16, attributionControl: false, dragRotate: false, pitchWithRotate: false, maxZoom: 20, fadeDuration: 0 });
+  map.touchZoomRotate.disableRotation();
+  map.addControl(new maplibregl.AttributionControl({ compact: true }), 'top-left');
+  map.on('error', (e) => { if (!/tile|Failed to fetch|404/i.test(e.error?.message || '')) console.warn('map', e.error?.message); });
+  const setup = () => {
+    if (mapReady) return;
+    map.addSource('feat', { type: 'geojson', data: fc([]) });
+    map.addLayer({ id: 'feat-fill', type: 'fill', source: 'feat', paint: { 'fill-color': ['match', ['get', 'kind'], 'green', '#8ef09a', 'bunker', '#f6e7b0', 'water', '#5aa9e6', '#a6ec83'],
+      'fill-opacity': ['match', ['get', 'kind'], 'green', 0.4, 'bunker', 0.3, 'water', 0.15, 0.1] } });
+    map.addLayer({ id: 'feat-line', type: 'line', source: 'feat', filter: ['==', ['get', 'kind'], 'green'], paint: { 'line-color': '#eaffea', 'line-width': 2 } });
+    map.addSource('arcs', { type: 'geojson', data: fc([]) });
+    map.addLayer({ id: 'arcs', type: 'line', source: 'arcs', paint: { 'line-color': ['get', 'c'], 'line-width': 3.5, 'line-opacity': 0.95 }, layout: { 'line-cap': 'round' } });
+    map.addSource('aim', { type: 'geojson', data: fc([]) });
+    map.addLayer({ id: 'aim', type: 'line', source: 'aim', paint: { 'line-color': '#ffffff', 'line-width': 3 }, layout: { 'line-cap': 'round', 'line-join': 'round' } });
+    map.addSource('shots', { type: 'geojson', data: fc([]) });
+    map.addLayer({ id: 'shots', type: 'line', source: 'shots', paint: { 'line-color': '#ffd23f', 'line-width': 3, 'line-dasharray': [2, 1.5] } });
+    mk.tee = new maplibregl.Marker({ element: el('mk-tee') }).setLngLat([0, 0]).addTo(map);
+    mk.pin = new maplibregl.Marker({ element: el('mk-pin', I.flag) }).setLngLat([0, 0]).addTo(map);
+    mk.me = new maplibregl.Marker({ element: el('mk-me') }).setLngLat([0, 0]).addTo(map);
+    mk.target = new maplibregl.Marker({ element: el('mk-target', '<i></i><span class="lab"></span>'), draggable: true }).setLngLat([0, 0]).addTo(map);
+    mk.target.on('drag', () => { const l = mk.target.getLngLat(); target = { lat: l.lat, lon: l.lng }; targetManual = true; drawAim(); });
+    map.on('click', (e) => { target = { lat: e.lngLat.lat, lon: e.lngLat.lng }; targetManual = true; drawAim(); });
+    mapReady = true; showHole(true);
+  };
+  // le style est intégré : on n'attend pas les tuiles satellite pour dessiner le trou
+  const wait = () => (map.isStyleLoaded() ? setup() : setTimeout(wait, 60));
+  map.on('load', setup); wait();
+}
+function origin() { // ma position si je suis sur ce trou, sinon le départ
+  const near = S.pos && geo && (dist(S.pos, geo.tee) < 700 || dist(S.pos, geo.center) < 700);
+  return near ? { p: S.pos, me: true } : { p: geo.tee, me: false };
+}
+function defaultTarget() {
+  const h = db.activeRound.holes[S.hole], o = origin(), toPin = dist(o.p, geo.center);
+  if (h.par === 3 || toPin < 230) return null;
+  // Point d'atterrissage à ~210 m le long du tracé du trou
+  const pts = [o.p, ...geo.line.filter((p) => dist(p, geo.center) < toPin)];
+  let acc = 0; const want = Math.min(210, toPin * 0.6);
+  for (let i = 1; i < pts.length; i++) {
+    const seg = dist(pts[i - 1], pts[i]);
+    if (acc + seg >= want) return dest(pts[i - 1], bearing(pts[i - 1], pts[i]), want - acc);
+    acc += seg;
   }
-  return d;
+  return dest(o.p, bearing(o.p, geo.center), want);
 }
-function buildICS(rem) {
-  const start = firstOccurrence(rem), end = new Date(start.getTime() + rem.duration * 60000);
-  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Mon Golf//FR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
-    `UID:${rem.id}@mon-golf`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`, `DTSTART:${icsDate(start)}`, `DTEND:${icsDate(end)}`,
-    `SUMMARY:⛳ ${rem.title}`.replace(/[,;]/g, (c) => '\\' + c), `DESCRIPTION:${(rem.note || 'Rappel créé avec Mon Golf').replace(/\n/g, '\\n').replace(/[,;]/g, (c) => '\\' + c)}`];
-  if (rem.where) L.push(`LOCATION:${rem.where.replace(/[,;]/g, (c) => '\\' + c)}`);
-  if (!rem.date) L.push(`RRULE:FREQ=WEEKLY;BYDAY=${rem.days.join(',')}`);
-  L.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:⛳ ${rem.title}`, `TRIGGER:${rem.alert ? `-PT${rem.alert}M` : 'PT0M'}`, 'END:VALARM');
-  if (rem.date) L.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:⛳ ${rem.title}`, 'TRIGGER:-PT60M', 'END:VALARM');
-  L.push('END:VEVENT', 'END:VCALENDAR');
-  return L.join('\r\n');
+function showHole(fit) {
+  if (!mapReady) return;
+  geo = roundHoleData(S.hole); if (!geo) return;
+  mapBearing = bearing(geo.tee, geo.center);
+  const feats = [];
+  for (const [k, list] of [['fairway', curCourse.fairways], ['water', curCourse.water], ['bunker', curCourse.bunkers], ['green', curCourse.greens]])
+    for (const p of list || []) if (p.length > 2 && dist(centroid(p), geo.center) < 700) feats.push(polyF(p, k));
+  map.getSource('feat').setData(fc(feats));
+  mk.pin.setLngLat(LL(geo.center)); mk.tee.setLngLat(LL(geo.tee));
+  target = defaultTarget(); targetManual = false; lastOrigin = origin().p;
+  if (fit) {
+    const o = origin(), pts = [geo.tee, geo.center, ...geo.line, ...(o.me ? [o.p] : [])];
+    const lons = pts.map((p) => p.lon), lats = pts.map((p) => p.lat);
+    const cam = map.cameraForBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { bearing: mapBearing, padding: { top: 60, bottom: 60, left: 96, right: 120 } });
+    if (cam) map.jumpTo({ ...cam, bearing: mapBearing, pitch: 0 });
+  }
+  updatePlay();
 }
-function addToApple(rem) {
-  const ics = buildICS(rem);
-  if (isIOS) { location.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics); return; }
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
-  a.download = `${rem.title.replace(/[^\w\- ]+/g, '').trim() || 'golf'}.ics`; a.click();
+function arcCoords(c, b, m, span = 30) { const out = []; for (let a = -span; a <= span; a += 3) out.push(LL(dest(c, b + a, m))); return out; }
+function drawAim() {
+  if (!geo || !mapReady) return;
+  const o = origin(), b = bearing(o.p, target || geo.center), toPin = dist(o.p, geo.center);
+  arcLabels.forEach((m) => m.remove()); arcLabels = [];
+  const arcs = [];
+  for (const m of [50, 100, 150, 200, 250]) {
+    if (m >= toPin - 20) break;
+    arcs.push({ type: 'Feature', properties: { c: m >= 150 ? '#3d7bff' : '#a9c6ff' }, geometry: { type: 'LineString', coordinates: arcCoords(o.p, b, m) } });
+    if (!target || Math.abs(dist(o.p, target) - m) > 22) arcLabels.push(new maplibregl.Marker({ element: el('mk-arc', m) }).setLngLat(LL(dest(o.p, b, m))).addTo(map));
+  }
+  map.getSource('arcs').setData(fc(arcs));
+  const tEl = mk.target.getElement();
+  if (target) {
+    map.getSource('aim').setData(fc([lineF([o.p, target, geo.center])]));
+    mk.target.setLngLat(LL(target)); tEl.style.display = '';
+    $('.lab', tEl).innerHTML = `<small>${Math.round(dist(target, geo.center))}<span class="up">${I.arrow}</span></small><b>${Math.round(dist(o.p, target))}</b>`;
+  } else { map.getSource('aim').setData(fc([lineF([o.p, geo.center])])); tEl.style.display = 'none'; }
 }
-function googleURL(rem) {
-  const s = firstOccurrence(rem), e = new Date(s.getTime() + rem.duration * 60000);
-  const u = new URL('https://calendar.google.com/calendar/render');
-  u.searchParams.set('action', 'TEMPLATE'); u.searchParams.set('text', '⛳ ' + rem.title);
-  u.searchParams.set('dates', `${icsDate(s)}/${icsDate(e)}`); u.searchParams.set('ctz', Intl.DateTimeFormat().resolvedOptions().timeZone);
-  u.searchParams.set('details', rem.note || 'Rappel créé avec Mon Golf');
-  if (rem.where) u.searchParams.set('location', rem.where);
-  if (!rem.date) u.searchParams.set('recur', `RRULE:FREQ=WEEKLY;BYDAY=${rem.days.join(',')}`);
-  return u.toString();
+function greenDistances(o) {
+  if (!geo.green) return { front: null, center: dist(o, geo.center), back: null };
+  const b0 = bearing(o, geo.center);
+  const proj = geo.green.map((p) => { const q = P(p); return dist(o, q) * Math.cos((bearing(o, q) - b0) * RAD); });
+  return { front: Math.max(0, Math.min(...proj)), center: dist(o, geo.center), back: Math.max(...proj) };
 }
-const remWhen = (r) => r.date ? `${fmtDay(r.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${r.time}` : `${r.days.map((d) => DAY_FR[d]).join(', ')} · ${r.time}`;
+function updatePlay() {
+  if (!S.play || !geo || !mapReady) return;
+  const r = db.activeRound; if (!r) return;
+  const h = r.holes[S.hole], o = origin();
+  if (!targetManual && (!lastOrigin || dist(lastOrigin, o.p) > 15)) { target = defaultTarget(); lastOrigin = o.p; }
+  mk.me.getElement().style.display = S.pos && o.me ? '' : 'none';
+  if (S.pos && o.me) mk.me.setLngLat(LL(S.pos));
+  const g = greenDistances(o.p), f = (x) => (x == null ? '—' : Math.round(x));
+  $('#gd').innerHTML = `<div class="b">${I.arrow}<span>${f(g.back)}</span></div><div class="c">${I.flag}<span>${f(g.center)}</span></div><div class="f"><i style="transform:rotate(180deg)">${I.arrow}</i><span>${f(g.front)}</span></div>`;
+  const w = S.weather && S.weather !== 'err' ? S.weather.current : null;
+  $('#wind').innerHTML = w ? `<span class="arrow" style="transform:rotate(${(w.wind_direction_10m + 180 - mapBearing + 360) % 360}deg)">${I.arrow}</span><b>${Math.round(w.wind_speed_10m)}</b><small>km/h</small>` : '';
+  $('#wind').style.display = w ? '' : 'none';
+  $('#play-hole').innerHTML = `<small>TROU</small> ${S.hole + 1}`;
+  $('#play-info').innerHTML = `Par <b>${h.par}</b>${h.hcp ? ' · HCP <b>' + h.hcp + '</b>' : ''} · <b>${Math.round(dist(geo.tee, geo.center))}</b> m`;
+  const status = !S.pos ? 'Recherche du GPS…' : o.me ? `GPS ± ${Math.round(S.pos.acc || 0)} m` : 'Pas sur ce trou · distances depuis le départ';
+  $('#play-status').innerHTML = `${esc(r.course)}${r.group ? ' · ' + esc(r.group) : ''} · <span class="${o.me ? 'ok' : 'off'}">${status}</span>`;
+  const n = r.holes.length;
+  $('#pv-prev').innerHTML = S.hole > 0 ? `‹ #${S.hole}` : '‹';
+  $('#pv-prev').disabled = S.hole === 0;
+  $('#pv-next').innerHTML = S.hole + 1 >= n ? 'Fin ›' : `#${S.hole + 2} ›`;
+  $('#pv-score').innerHTML = h.strokes ? `Trou ${S.hole + 1} : ${h.strokes} <small>(${played(r).length ? toPar(rDiff(r)) : 'E'})</small>` : `Saisir le score <small>(${played(r).length ? toPar(rDiff(r)) : 'E'})</small>`;
+  // Coups joués sur ce trou
+  shotLabels.forEach((m) => m.remove()); shotLabels = [];
+  const shots = h.shots || [], pts = shots.map((s) => ({ lat: s.lat, lon: s.lon }));
+  if (pts.length && S.pos && o.me) pts.push(S.pos);
+  map.getSource('shots').setData(fc(pts.length > 1 ? [lineF(pts)] : []));
+  shots.forEach((s, i) => {
+    const next = pts[i + 1], d = next ? Math.round(dist(s, next)) : null;
+    shotLabels.push(new maplibregl.Marker({ element: el('mk-shot', `<i>${i + 1}</i>${d ? `<span>${d} m</span>` : ''}`) }).setLngLat([s.lon, s.lat]).addTo(map));
+  });
+  const ls = $('#last-shot');
+  ls.innerHTML = shots.length && S.pos && o.me ? `Coup ${shots.length} : <b>${Math.round(dist(shots[shots.length - 1], S.pos))} m</b>` : '';
+  ls.style.display = ls.innerHTML ? '' : 'none';
+  $('#btn-motion').classList.toggle('on', motionOn);
+  $('#btn-shot span').textContent = shots.length ? `Coup ${shots.length + 1}` : 'Coup';
+  drawAim();
+}
+function addShot(auto = false) {
+  const h = db.activeRound?.holes[S.hole];
+  if (!h) return;
+  if (!S.pos) return toast('Position GPS pas encore trouvée');
+  (h.shots ||= []).push({ lat: +S.pos.lat.toFixed(6), lon: +S.pos.lon.toFixed(6), t: Date.now(), auto });
+  save(); updatePlay();
+  if (navigator.vibrate) navigator.vibrate(60);
+  toast(`${auto ? 'Swing détecté · ' : ''}Coup ${h.shots.length} enregistré${S.pos.acc > 25 ? ` (GPS ± ${Math.round(S.pos.acc)} m)` : ''}`, 'Annuler', () => { h.shots.pop(); save(); updatePlay(); });
+}
+function goHole(i) {
+  const r = db.activeRound, n = r.holes.length;
+  if (i >= n) { if (played(r).length) { if (confirm('Terminer la partie ?')) finishRound(); } else toast('Saisissez au moins un score'); return; }
+  S.hole = Math.max(0, i); showHole(true);
+}
+
+/* Détection des coups par les capteurs de l'iPhone (accéléromètre + gyroscope) */
+let motionOn = false, lastSwing = 0, peak = [];
+async function toggleMotion() {
+  if (motionOn) { window.removeEventListener('devicemotion', onMotion); motionOn = false; db.settings.motion = false; save(); updatePlay(); toast('Détection automatique désactivée'); return; }
+  try {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      if ((await DeviceMotionEvent.requestPermission()) !== 'granted') return toast('Autorisez « Mouvement et orientation »');
+    }
+  } catch { return toast('Capteurs non disponibles'); }
+  window.addEventListener('devicemotion', onMotion); motionOn = true; db.settings.motion = true; save(); updatePlay();
+  toast('Détection des swings activée : iPhone en poche, app ouverte');
+}
+function onMotion(e) {
+  const r = e.rotationRate || {}, a = e.acceleration || {};
+  const rot = Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0); // °/s
+  const acc = Math.hypot(a.x || 0, a.y || 0, a.z || 0); // m/s² hors gravité
+  const now = Date.now();
+  // Un swing = forte rotation du bassin ET pic d'accélération dans la même demi-seconde, à l'arrêt
+  peak = peak.filter((p) => now - p.t < 500); peak.push({ t: now, rot, acc });
+  if (now - lastSwing < 20000 || !S.play || (S.pos?.speed || 0) > 1.5) return;
+  if (Math.max(...peak.map((p) => p.rot)) > 300 && Math.max(...peak.map((p) => p.acc)) > 14) { lastSwing = now; peak = []; addShot(true); }
+}
 
 /* ================= Vues ================= */
-const TABS = [['today', 'Aujourd\'hui', 'today'], ['round', 'Partie', 'flag'], ['swing', 'Swing', 'video'], ['train', 'Entraînement', 'train'], ['rem', 'Rappels', 'bell']];
-function renderTabbar() {
-  $('#tabbar').innerHTML = TABS.map(([k, l, ic]) => `<button data-a="tab" data-t="${k}" class="${S.tab === k ? 'on' : ''}">${I[ic]}<span>${l}</span></button>`).join('');
+const TABS = [['today', 'Aujourd\'hui', 'today'], ['round', 'Partie', 'flag'], ['swing', 'Swing', 'video'], ['journal', 'Journal', 'train'], ['signets', 'Signets', 'bookmark']];
+function renderTabbar() { $('#tabbar').innerHTML = TABS.map(([k, l, ic]) => `<button data-a="tab" data-t="${k}" class="${S.tab === k ? 'on' : ''}">${I[ic]}<span>${l}</span></button>`).join(''); }
+function go(tab) {
+  if (tab === 'signets') { location.href = 'signets/'; return; }
+  if (S.tab === 'swing' && tab !== 'swing') stopCam();
+  S.tab = tab; if (!S.play) { render(); window.scrollTo(0, 0); }
 }
-function go(tab) { if (S.tab === 'swing' && tab !== 'swing') stopCam(); S.tab = tab; render(); window.scrollTo(0, 0); }
 const header = (title, eyebrow = '', right = '') => `<header class="lt"><div>${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ''}<h1>${title}</h1></div>${right}</header>`;
 const tiles = (arr) => `<div class="tiles">${arr.map(([v, l]) => `<div class="tile"><b>${v}</b><span>${l}</span></div>`).join('')}</div>`;
-
+const kmTxt = (m) => (m < 800 ? 'Vous y êtes' : (m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',') + ' km');
+function courseRow(c) {
+  return `<button class="row" data-a="pick" data-id="${c.id}"><div class="ic">${I.flag}</div><div class="main"><div class="t">${esc(c.name)}</div><div class="s">${[c.city, kmTxt(c.d)].filter(Boolean).map(esc).join(' · ')}</div></div>${c.mapped >= 9 ? '<span class="pill acc">Plan GPS</span>' : ''}${I.chev}</button>`;
+}
 function vToday() {
-  const r = db.activeRound;
-  const month = isoDay().slice(0, 7);
-  const hMonth = sum(db.sessions.filter((s) => s.date.startsWith(month)), (s) => s.duration) / 60;
-  const full = db.rounds.filter((x) => x.complete && x.holes.length === 18);
+  const r = db.activeRound, full = db.rounds.filter((x) => x.complete && x.holes.length === 18);
   const best = full.length ? Math.min(...full.map(rStrokes)) : '—';
-  const nextRem = db.reminders.map((x) => ({ x, d: firstOccurrence(x) })).filter((o) => o.d > new Date()).sort((a, b) => a.d - b.d).slice(0, 3);
   let callout = '';
-  if (r) callout = `<button class="card callout row" data-a="tab" data-t="round" style="margin-top:12px"><div class="badge">${I.flag}</div><div class="main"><div class="t">Partie en cours</div><div class="s">${esc(r.course)} · ${played(r).length}/${r.holes.length} trous · ${played(r).length ? toPar(rDiff(r)) : '—'}</div></div>${I.chev}</button>`;
-  else if (S.golf && !db.rounds.some((x) => x.date === isoDay() && x.courseKey === S.golf.key)) callout = `<button class="card callout row" data-a="start-detected" style="margin-top:12px"><div class="badge">${I.pin}</div><div class="main"><div class="t">Vous êtes à ${esc(S.golf.name)}</div><div class="s">Touchez pour lancer la carte de score</div></div>${I.chev}</button>`;
-  const recent = [...db.rounds.slice(0, 2).map((x) => ({ d: x.date, h: roundRow(x) })), ...db.sessions.slice(0, 3).map((s) => ({ d: s.date, h: sessionRow(s, false) }))]
-    .sort((a, b) => b.d.localeCompare(a.d)).slice(0, 4);
+  if (r) callout = `<button class="card callout row" data-a="resume" style="margin-top:12px"><div class="badge">${I.flag}</div><div class="main"><div class="t">Partie en cours</div><div class="s">${esc(r.course)} · ${played(r).length}/${r.holes.length} trous · ${played(r).length ? toPar(rDiff(r)) : 'E'}</div></div>${I.chev}</button>`;
+  else if (S.here) callout = `<button class="card callout row" data-a="pick" data-id="${S.here.id}" style="margin-top:12px"><div class="badge">${I.pin}</div><div class="main"><div class="t">Vous êtes à ${esc(S.here.name)}</div><div class="s">Touchez pour jouer avec le plan GPS</div></div>${I.chev}</button>`;
+  const near = sortedCourses().slice(0, 4), month = isoDay().slice(0, 7);
   return header('Aujourd\'hui', fmtDay(new Date(), { weekday: 'long', day: 'numeric', month: 'long' }), `<button class="icon-btn" data-a="settings" aria-label="Réglages">${I.gear}</button>`)
     + heroHTML() + callout
-    + `<h2 class="sec">Ma saison</h2>` + tiles([[best, 'Meilleur score 18 trous'], [db.rounds.length, 'Parties jouées'], [hMonth.toFixed(hMonth < 10 ? 1 : 0).replace('.', ',') + ' h', 'Entraînement ce mois-ci']])
-    + `<h2 class="sec">Prochains rappels <button data-a="tab" data-t="rem">Tout voir</button></h2>`
-    + `<div class="group">${nextRem.map(({ x, d }) => `<div class="row"><div class="ic" style="background:var(--orange)">${I.bell}</div><div class="main"><div class="t">${esc(x.title)}</div><div class="s">${d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'short' })} à ${x.time}</div></div></div>`).join('')
-      || `<button class="row" data-a="new-rem"><div class="ic" style="background:var(--orange)">${I.plus}</div><div class="main"><div class="t">Créer un rappel</div><div class="s">Practice, putting, partie… dans votre calendrier</div></div>${I.chev}</button>`}</div>`
-    + `<h2 class="sec">Activité récente</h2><div class="group">${recent.map((x) => x.h).join('') || '<div class="empty">Vos parties et séances apparaîtront ici.</div>'}</div>`;
+    + `<h2 class="sec">Golfs près de ${S.pos ? 'vous' : 'Luzarches'} <button data-a="tab" data-t="round">Tous</button></h2><div class="group">${near.map(courseRow).join('') || `<div class="empty">${S.index ? 'Base des golfs en cours de création…' : '<span class="spin"></span>'}</div>`}</div>`
+    + `<h2 class="sec">Ma saison</h2>` + tiles([[best, 'Meilleur score 18 trous'], [db.rounds.length, 'Parties jouées'],
+      [(sum(db.sessions.filter((s) => s.date.startsWith(month)), (s) => s.duration) / 60).toFixed(1).replace('.', ',') + ' h', 'Entraînement ce mois-ci']]);
 }
 function roundRow(x) {
   const d = rDiff(x);
   return `<button class="row" data-a="view-round" data-id="${x.id}"><div class="ic">${I.flag}</div><div class="main"><div class="t">${esc(x.course)}</div><div class="s">${fmtDay(x.date, { day: 'numeric', month: 'long', year: 'numeric' })} · ${played(x).length} trous</div></div>
     <span class="v"><b style="color:var(--text)">${rStrokes(x)}</b> <span class="round-badge ${d < 0 ? 'u' : d > 0 ? 'o' : ''}">${toPar(d)}</span></span>${I.chev}</button>`;
 }
-
+function holeEditor(r, h) {
+  const [nm, cls] = scoreName(h.strokes, h.par);
+  return `<div class="hole-top"><div class="hole-no"><small>Trou</small><b>${S.hole + 1}</b></div>
+      <div class="hole-info"><span class="pill acc">Par ${h.par}</span>${h.hcp ? `<span class="pill">HCP ${h.hcp}</span>` : ''}${h.dist ? `<span class="pill">${h.dist} m</span>` : ''}${h.shots?.length ? `<span class="pill">${h.shots.length} coup${h.shots.length > 1 ? 's' : ''} GPS</span>` : ''}</div></div>
+    <div class="stepper"><button class="pm" data-a="st" data-d="-1" aria-label="Moins">−</button>
+      <button class="val" data-a="st-par"><b class="${h.strokes ? 'n-' + cls : 'ghost'}">${h.strokes || h.par}</b><span>${h.strokes ? nm : 'Touchez = par'}</span></button>
+      <button class="pm" data-a="st" data-d="1" aria-label="Plus">+</button></div>
+    <div class="lbl-sm">Putts</div>
+    <div class="stepper sm"><button class="pm" data-a="pu" data-d="-1">−</button><div class="val"><b>${h.putts}</b></div><button class="pm" data-a="pu" data-d="1">+</button></div>
+    ${r.mapped ? '' : `<div class="lbl-sm">Par du trou</div><div class="seg">${[3, 4, 5].map((p) => `<button data-a="par" data-v="${p}" class="${h.par === p ? 'on' : ''}">Par ${p}</button>`).join('')}</div>`}`;
+}
 function vRound() {
   const r = db.activeRound;
   if (!r) {
-    const full = db.rounds.filter((x) => x.complete && x.holes.length === 18).slice(0, 5);
-    const ph = db.rounds.flatMap((x) => played(x));
-    const fw = db.rounds.flatMap((x) => x.holes.filter((h) => h.fw));
+    const ph = db.rounds.flatMap(played);
     return header('Partie')
       + `<div class="search">${I.search}<input type="search" id="q" placeholder="Rechercher un golf" value="${esc(S.search)}" autocomplete="off"></div>`
-      + `<div id="courses"></div>`
-      + `<div class="btns two mt"><button class="btn tinted" data-a="plan-round">${I.cal}Planifier</button><button class="btn gray" data-a="free-round">${I.plus}Partie libre</button></div>`
-      + (db.rounds.length ? `<h2 class="sec">Statistiques</h2>` + tiles([
-          [full.length ? Math.round(sum(full, rStrokes) / full.length) : '—', 'Moyenne 18 trous (5 dern.)'],
-          [ph.length ? (sum(ph, (h) => h.putts) / ph.length).toFixed(1).replace('.', ',') : '—', 'Putts par trou'],
-          [fw.length ? Math.round(fw.filter((h) => h.fw === 'c').length / fw.length * 100) + ' %' : '—', 'Fairways touchés']]) : '')
+      + `<div id="courses">${courseListHTML()}</div>`
+      + `<div class="btns"><button class="btn gray" data-a="free-round">${I.plus}Partie sur un autre golf</button></div>`
+      + (db.rounds.length ? `<h2 class="sec">Statistiques</h2>` + tiles([[db.rounds.length, 'Parties'], [ph.length ? (sum(ph, (h) => h.putts) / ph.length).toFixed(1).replace('.', ',') : '—', 'Putts par trou'],
+        [ph.length ? '+' + (sum(ph, (h) => h.strokes - h.par) / ph.length).toFixed(1).replace('.', ',') : '—', 'Moyenne / par par trou']]) : '')
       + `<h2 class="sec">Historique</h2><div class="group">${db.rounds.map(roundRow).join('') || '<div class="empty">Aucune partie pour l\'instant.</div>'}</div>`;
   }
-  const h = r.holes[S.hole], [nm, cls] = scoreName(h.strokes, h.par);
-  const noData = r.source !== 'osm';
   const thru = played(r).length;
   return header(esc(r.course), 'Partie en cours', `<button class="icon-btn" data-a="round-menu" aria-label="Options">${I.gear}</button>`)
+    + (r.mapped ? `<button class="btn" data-a="open-play" style="margin-bottom:12px">${I.target}Ouvrir le plan GPS</button>` : '')
     + `<div class="card score-head"><div><b>${rStrokes(r) || '—'}</b><span>Score</span></div><div><b class="${thru ? (rDiff(r) < 0 ? 'n-birdie' : rDiff(r) > 0 ? 'n-bogey' : 'n-par') : ''}">${thru ? toPar(rDiff(r)) : '—'}</b><span>Par</span></div><div><b>${thru}/${r.holes.length}</b><span>Trous</span></div></div>`
-    + `<div class="card hole mt" id="holecard">
-        <div class="hole-top"><div class="hole-no"><small>Trou</small><b>${S.hole + 1}</b></div>
-          <div class="hole-info"><span class="pill acc">Par ${h.par}</span>${h.hcp ? `<span class="pill">HCP ${h.hcp}</span>` : ''}${h.dist ? `<span class="pill">${h.dist} m</span>` : ''}</div></div>
-        <div class="stepper"><button class="pm" data-a="st" data-d="-1" aria-label="Moins">−</button>
-          <button class="val" data-a="st-par"><b class="${h.strokes ? 'n-' + cls : 'ghost'}">${h.strokes || h.par}</b><span>${h.strokes ? nm : 'Touchez = par'}</span></button>
-          <button class="pm" data-a="st" data-d="1" aria-label="Plus">+</button></div>
-        <div class="lbl-sm">Putts</div>
-        <div class="stepper sm"><button class="pm" data-a="pu" data-d="-1">−</button><div class="val"><b>${h.putts}</b></div><button class="pm" data-a="pu" data-d="1">+</button></div>
-        ${h.par > 3 ? `<div class="lbl-sm">Mise en jeu</div><div class="seg">${[['l', '← Gauche'], ['c', 'Fairway'], ['r', 'Droite →']].map(([k, l]) => `<button data-a="fw" data-v="${k}" class="${h.fw === k ? 'on' : ''}">${l}</button>`).join('')}</div>` : ''}
-        ${noData ? `<div class="lbl-sm">Par du trou</div><div class="seg">${[3, 4, 5].map((p) => `<button data-a="par" data-v="${p}" class="${h.par === p ? 'on' : ''}">Par ${p}</button>`).join('')}</div>` : ''}
-      </div>
+    + `<div class="card hole mt" id="holecard">${holeEditor(r, r.holes[S.hole])}</div>
       <div class="hole-nav"><button class="btn gray" data-a="prev">‹ Trou ${((S.hole - 1 + r.holes.length) % r.holes.length) + 1}</button><button class="btn" data-a="next">Trou ${((S.hole + 1) % r.holes.length) + 1} ›</button></div>
       <h2 class="sec">Carte de score</h2>${scorecardHTML(r, S.hole)}
-      ${noData ? '<p class="foot">Carte officielle non disponible pour ce golf : indiquez le par de chaque trou, il sera mémorisé pour vos prochaines parties.</p>' : '<p class="foot">Pars, handicaps et distances : données OpenStreetMap.</p>'}
+      ${r.mapped ? '<p class="foot">Plan, pars et handicaps : © contributeurs OpenStreetMap.</p>' : '<p class="foot">Indiquez le par de chaque trou : il sera mémorisé pour vos prochaines parties.</p>'}
       <div class="btns"><button class="btn" data-a="finish">Terminer la partie</button></div>`;
 }
-function renderCourseList() {
-  const el = $('#courses'); if (!el) return;
-  let list, title;
-  if (S.searchRes) { title = 'Résultats'; list = S.searchRes; }
-  else { title = 'Golfs à proximité'; list = S.nearby; }
-  let body;
-  if (list === 'loading' || (list == null && S.pos && !S.nearbyErr)) body = '<div class="empty"><span class="spin"></span></div>';
-  else if (list === 'err' || (list == null && S.nearbyErr)) body = '<div class="empty">Recherche indisponible pour le moment. Réessayez.</div>';
-  else if (list == null) body = '<div class="empty">Autorisez la localisation ou recherchez un golf par son nom.</div>';
-  else if (!list.length) body = '<div class="empty">Aucun golf trouvé.</div>';
-  else body = list.slice(0, 25).map((c, i) => `<button class="row" data-a="pick-course" data-i="${i}"><div class="ic">${I.flag}</div><div class="main"><div class="t">${esc(c.name)}</div><div class="s">${[c.city, c.d != null ? (c.d < 1 ? 'Vous y êtes' : c.d.toFixed(c.d < 10 ? 1 : 0).replace('.', ',') + ' km') : ''].filter(Boolean).map(esc).join(' · ')}</div></div>${db.courses[c.key] ? '<span class="pill acc">Carte</span>' : ''}${I.chev}</button>`).join('');
-  el.innerHTML = `<h2 class="sec">${title}</h2><div class="group">${body}</div>`;
-  el._list = Array.isArray(list) ? list : [];
+const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function courseListHTML() {
+  if (!S.index) return '<h2 class="sec">Golfs</h2><div class="group"><div class="empty"><span class="spin"></span></div></div>';
+  const q = norm(S.search.trim());
+  let list = sortedCourses();
+  if (q) list = list.filter((c) => norm(c.name + ' ' + c.city).includes(q));
+  let body = list.slice(0, q ? 40 : 80).map(courseRow).join('');
+  if (!body) body = S.index.length ? '<div class="empty">Aucun golf de la base ne correspond.</div>' : '<div class="empty">La base des golfs est en cours de création. Revenez dans quelques minutes.</div>';
+  let extra = '';
+  if (q.length >= 3 && Array.isArray(S.photon) && S.photon.length) extra = `<h2 class="sec">Ailleurs en France</h2><div class="group">${S.photon.map((c) => `<button class="row" data-a="free-named" data-name="${esc(c.name)}"><div class="ic" style="background:var(--text3)">${I.flag}</div><div class="main"><div class="t">${esc(c.name)}</div><div class="s">${esc(c.city)} · carte de score seule</div></div>${I.chev}</button>`).join('')}</div>`;
+  return `<h2 class="sec">${q ? 'Résultats' : 'Golfs autour de Luzarches (50 km)'}</h2><div class="group">${body}</div>${extra}`;
 }
-
+let photonT;
+function searchPhoton(q) {
+  clearTimeout(photonT); S.photon = null;
+  if (q.trim().length < 3) return;
+  photonT = setTimeout(async () => {
+    try {
+      const u = new URL('https://photon.komoot.io/api/'), p = ref();
+      Object.entries({ q, osm_tag: 'leisure:golf_course', limit: 8, lang: 'fr', lat: p.lat, lon: p.lon }).forEach(([k, v]) => u.searchParams.set(k, v));
+      const j = await (await fetch(u)).json(), known = new Set((S.index || []).map((c) => c.id));
+      S.photon = j.features.map((f) => ({ id: (f.properties.osm_type || '').toLowerCase() + f.properties.osm_id, name: f.properties.name, city: f.properties.city || f.properties.state || '' }))
+        .filter((c) => c.name && !known.has(c.id));
+      if ($('#courses') && S.search === q) $('#courses').innerHTML = courseListHTML();
+    } catch {}
+  }, 450);
+}
 function vSwing() {
   return header('Swing', '', `<label class="icon-btn" aria-label="Importer une vidéo">${I.upload}<input type="file" id="swing-file" accept="video/*" hidden></label>`)
-    + `<div class="cam" id="cam">${S.cam ? '<video id="preview" playsinline muted autoplay></video>' : `<div class="ph">${I.cam}<div>Placez le téléphone à hauteur de hanches,<br>face à vous ou dans l'axe de la cible.</div><button class="btn small" data-a="cam-on">Activer la caméra</button></div>`}
+    + `<div class="cam" id="cam">${S.cam ? '<video id="preview" playsinline muted autoplay></video>' : `<div class="ph">${I.cam}<div>Posez le téléphone à hauteur de hanches,<br>face à vous ou dans l'axe de la cible.</div><button class="btn small" data-a="cam-on">Activer la caméra</button></div>`}
        ${S.cam ? `<button class="icon-btn close" data-a="cam-off" aria-label="Fermer">${I.x}</button><button class="shutter ${S.rec ? 'rec' : ''}" data-a="rec" aria-label="Enregistrer"></button>${S.rec ? '<div class="timer" id="timer">0:00</div>' : ''}` : ''}</div>`
     + `<h2 class="sec">Mes swings</h2><div class="group" id="swings">${swingsHTML()}</div>`;
 }
 function swingsHTML() {
-  return S.swings.map((s) => `<div class="row"><button class="ic" style="border:0;background:#111" data-a="play" data-id="${s.id}">${I.play}</button><button class="main" style="border:0;background:none;text-align:left;padding:0" data-a="play" data-id="${s.id}"><div class="t">${esc(s.label || 'Swing')}</div><div class="s">${new Date(s.date).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div></button><button class="del" data-a="del-swing" data-id="${s.id}" aria-label="Supprimer">${I.trash}</button></div>`).join('')
-    || '<div class="empty">Filmez votre premier swing pour le revoir au ralenti.</div>';
+  return S.swings.map((s) => `<div class="row"><button class="ic" style="border:0;background:#111" data-a="play-swing" data-id="${s.id}">${I.play}</button><button class="main" style="border:0;background:none;text-align:left;padding:0;color:inherit" data-a="play-swing" data-id="${s.id}"><div class="t">Swing du ${new Date(s.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</div><div class="s">${new Date(s.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div></button><button class="del" data-a="del-swing" data-id="${s.id}" aria-label="Supprimer">${I.trash}</button></div>`).join('')
+    || '<div class="empty">Filmez votre swing pour le revoir au ralenti.</div>';
 }
-
 const FEEL = ['', '😣', '😕', '😐', '🙂', '🤩'];
 const SESSION_TYPES = ['Practice', 'Putting', 'Petit jeu', 'Bunker', 'Parcours', 'Physique'];
 const SESSION_COLORS = { Practice: '#0b7a4b', Putting: '#1f6fe0', 'Petit jeu': '#b8912f', Bunker: '#c47a2c', Parcours: '#2d8a5b', Physique: '#e0312b' };
-function sessionRow(s, del = true) {
-  return `<div class="row"><div class="ic" style="background:${SESSION_COLORS[s.type] || 'var(--accent)'}">${I.train}</div><div class="main"><div class="t">${esc(s.type)} · ${s.duration} min ${FEEL[s.feeling] || ''}</div><div class="s">${fmtDay(s.date, { day: 'numeric', month: 'long' })}${s.notes ? ' — ' + esc(s.notes) : ''}</div></div>${del ? `<button class="del" data-a="del-session" data-id="${s.id}" aria-label="Supprimer">${I.trash}</button>` : ''}</div>`;
+function sessionRow(s) {
+  return `<div class="row"><div class="ic" style="background:${SESSION_COLORS[s.type] || 'var(--accent)'}">${I.train}</div><div class="main"><div class="t">${esc(s.type)} · ${s.duration} min ${FEEL[s.feeling] || ''}</div><div class="s">${fmtDay(s.date, { day: 'numeric', month: 'long' })}${s.notes ? ' — ' + esc(s.notes) : ''}</div></div><button class="del" data-a="del-session" data-id="${s.id}" aria-label="Supprimer">${I.trash}</button></div>`;
 }
-const INSTA_CATS = ['Swing', 'Drive', 'Fers', 'Petit jeu', 'Putting', 'Bunker', 'Mental', 'Physique'];
-function vTrain() {
-  const seg = `<div class="seg" style="margin-bottom:6px">${[['journal', 'Journal'], ['insta', 'Inspiration Instagram']].map(([k, l]) => `<button data-a="seg" data-v="${k}" class="${S.trainSeg === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
-  if (S.trainSeg === 'journal') {
-    const month = isoDay().slice(0, 7), ms = db.sessions.filter((s) => s.date.startsWith(month));
-    const feel = ms.length ? FEEL[Math.round(sum(ms, (s) => s.feeling) / ms.length)] : '—';
-    return header('Entraînement', '', `<button class="icon-btn" data-a="new-session" aria-label="Nouvelle séance">${I.plus}</button>`) + seg
-      + `<h2 class="sec">Ce mois-ci</h2>` + tiles([[ms.length, 'Séances'], [(sum(ms, (s) => s.duration) / 60).toFixed(1).replace('.', ',') + ' h', 'Temps total'], [feel, 'Ressenti moyen']])
-      + `<div class="btns"><button class="btn" data-a="new-session">${I.plus}Nouvelle séance</button></div>`
-      + `<h2 class="sec">Historique</h2><div class="group">${db.sessions.map((s) => sessionRow(s)).join('') || '<div class="empty">Aucune séance enregistrée.</div>'}</div>`;
-  }
-  const cats = ['Tous', ...INSTA_CATS.filter((c) => db.insta.some((x) => x.cat === c))];
-  const list = db.insta.filter((x) => S.instaCat === 'Tous' || x.cat === S.instaCat);
-  return header('Entraînement', '', `<button class="icon-btn" data-a="new-insta" aria-label="Ajouter un post">${I.plus}</button>`) + seg
-    + `<div class="card pad mt" style="text-align:center"><div style="font-weight:700;font-size:20px">Ma collection Golf</div>
-        <div class="muted" style="font-size:15px;margin:4px 0 14px">${db.instaCollection ? 'Ouvre directement vos posts golf enregistrés.' : 'Reliez votre collection « Golf » enregistrée sur Instagram.'}</div>
-        ${db.instaCollection ? `<a class="btn insta" href="${esc(db.instaCollection)}" target="_blank" rel="noopener">${I.insta}Ouvrir sur Instagram</a><button class="btn danger" data-a="link-insta" style="margin-top:4px">Modifier le lien</button>`
-          : `<button class="btn insta" data-a="link-insta">${I.insta}Relier ma collection</button>`}</div>`
-    + `<h2 class="sec">Posts favoris <button data-a="new-insta">Ajouter</button></h2>`
-    + (db.insta.length ? `<div class="chips">${cats.map((c) => `<button data-a="icat" data-v="${esc(c)}" class="${S.instaCat === c ? 'on' : ''}">${esc(c)}</button>`).join('')}</div>` : '')
-    + `<div class="group">${list.map((x) => `<div class="row"><a class="main" href="${esc(x.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none"><div class="t">${esc(x.title || 'Post Instagram')}</div><div class="s">${esc(x.cat)}</div></a><button class="del" data-a="del-insta" data-id="${x.id}" aria-label="Supprimer">${I.trash}</button></div>`).join('')
-        || '<div class="empty">Gardez ici les vidéos qui vous servent vraiment : drills, conseils de pros…<br>Dans Instagram : Partager → Copier le lien.</div>'}</div>`;
+function vJournal() {
+  const month = isoDay().slice(0, 7), ms = db.sessions.filter((s) => s.date.startsWith(month));
+  return header('Journal', '', `<button class="icon-btn" data-a="new-session" aria-label="Nouvelle séance">${I.plus}</button>`)
+    + `<h2 class="sec" style="margin-top:4px">Ce mois-ci</h2>` + tiles([[ms.length, 'Séances'], [(sum(ms, (s) => s.duration) / 60).toFixed(1).replace('.', ',') + ' h', 'Temps total'], [ms.length ? FEEL[Math.round(sum(ms, (s) => s.feeling) / ms.length)] : '—', 'Ressenti moyen']])
+    + `<div class="btns"><button class="btn" data-a="new-session">${I.plus}Nouvelle séance</button></div>`
+    + `<h2 class="sec">Historique</h2><div class="group">${db.sessions.map(sessionRow).join('') || '<div class="empty">Aucune séance enregistrée.</div>'}</div>`;
 }
-
-function vRem() {
-  const rec = db.reminders.filter((r) => !r.date), one = db.reminders.filter((r) => r.date && firstOccurrence(r) > new Date(Date.now() - 864e5));
-  const row = (r) => `<button class="row" data-a="rem-open" data-id="${r.id}"><div class="ic" style="background:${r.date ? 'var(--accent)' : 'var(--orange)'}">${r.date ? I.flag : I.bell}</div><div class="main"><div class="t">${esc(r.title)}</div><div class="s">${remWhen(r)}${r.where ? ' · ' + esc(r.where) : ''}</div></div>${I.chev}</button>`;
-  return header('Rappels', '', `<button class="icon-btn" data-a="new-rem" aria-label="Nouveau rappel">${I.plus}</button>`)
-    + `<p class="foot" style="margin:0 4px 16px">Vos rappels s'ajoutent à votre calendrier (Apple, Google ou Outlook) : vous recevez la notification même quand l'app est fermée.</p>`
-    + `<div class="btns two"><button class="btn" data-a="new-rem">${I.bell}Entraînement</button><button class="btn tinted" data-a="plan-round">${I.flag}Partie</button></div>`
-    + `<h2 class="sec">Entraînements réguliers</h2><div class="group">${rec.map(row).join('') || '<div class="empty">Ex. : practice le mardi et le jeudi à 18 h.</div>'}</div>`
-    + `<h2 class="sec">Parties prévues</h2><div class="group">${one.map(row).join('') || '<div class="empty">Aucune partie planifiée.</div>'}</div>`;
-}
-
 function render() {
   renderTabbar();
-  const v = { today: vToday, round: vRound, swing: vSwing, train: vTrain, rem: vRem }[S.tab];
+  const v = { today: vToday, round: vRound, swing: vSwing, journal: vJournal }[S.tab] || vToday;
   $('#view').innerHTML = v();
-  if (S.tab === 'round' && !db.activeRound) renderCourseList();
-  if (S.tab === 'swing' && S.cam) { const p = $('#preview'); p.srcObject = S.cam; }
-}
-function softRender() { // met à jour sans perturber une saisie en cours
-  const a = document.activeElement;
-  if (a && a.closest && a.closest('#view') && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) return;
-  if (S.tab === 'today') render();
+  if (S.tab === 'swing' && S.cam) $('#preview').srcObject = S.cam;
 }
 
-/* ================= Feuilles (formulaires) ================= */
+/* ================= Feuilles ================= */
 function sheetSettings() {
   openSheet(sheetHead('Réglages', '', 'OK')
     + `<div class="gh">Au golf</div><div class="group plain">
-        <div class="field"><label for="o-auto">Lancer la carte de score en arrivant au golf</label><span class="switch"><input type="checkbox" id="o-auto" ${db.settings.auto ? 'checked' : ''}><span></span></span></div>
+        <div class="field"><label for="o-auto">Ouvrir le plan GPS en arrivant au golf</label><span class="switch"><input type="checkbox" id="o-auto" ${db.settings.auto ? 'checked' : ''}><span></span></span></div>
         <div class="field"><label for="o-wake">Garder l'écran allumé en partie</label><span class="switch"><input type="checkbox" id="o-wake" ${db.settings.wake ? 'checked' : ''}><span></span></span></div></div>
-      <p class="foot">La détection se fait à l'ouverture de l'app (et toutes les 5 min tant qu'elle est ouverte). ${S.golf ? 'Position actuelle : ' + esc(S.golf.name) + '.' : ''}</p>
       <div class="gh">Mes données</div><div class="group plain">
         <button class="row" data-a="export"><div class="main"><div class="t" style="color:var(--accent)">Exporter une sauvegarde</div></div></button>
         <label class="row"><div class="main"><div class="t" style="color:var(--accent)">Restaurer une sauvegarde</div></div><input type="file" id="import" accept="application/json,.json" hidden></label></div>
-      <p class="foot">Tout reste sur votre téléphone, rien n'est envoyé ailleurs. Les vidéos ne sont pas incluses dans la sauvegarde.</p>
-      <p class="foot">Météo : Open-Meteo · Golfs et cartes de score : © contributeurs OpenStreetMap.</p>`);
+      <p class="foot">Tout reste sur votre téléphone. Base de ${S.index?.length || 0} golfs, mise à jour chaque mois depuis OpenStreetMap.</p>
+      <p class="foot">Météo : Open-Meteo · Satellite : Esri · Plans des golfs : © contributeurs OpenStreetMap.</p>`);
   $('#o-auto').onchange = (e) => { db.settings.auto = e.target.checked; save(); };
   $('#o-wake').onchange = (e) => { db.settings.wake = e.target.checked; save(); e.target.checked ? keepAwake() : releaseWake(); };
   $('#import').onchange = importData;
 }
-function sheetCourse(c) {
-  openSheet(sheetHead(esc(c.name), '', 'Fermer') + `<div class="card pad" id="course-info" style="text-align:center"><span class="spin"></span><div class="muted mt">Recherche de la carte de score…</div></div>`);
-  loadCourseHoles(c).then((data) => {
-    const el = $('#course-info'); if (!el) return;
-    const holes = data?.holes;
-    let n = 18;
-    el.outerHTML = (holes
-      ? `<div class="card pad"><div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:20px">${holes.length} trous · Par ${sum(holes, (h) => h.par)}</b><span class="pill acc">${data.source === 'osm' ? 'Carte officielle' : 'Mes pars'}</span></div></div><div class="mt">${scorecardHTML({ holes: holes.map((h) => ({ ...h, strokes: 0, putts: 0 })) })}</div>`
-      : `<div class="card pad"><b>Carte de score non disponible</b><div class="muted mt" style="font-size:15px">Ce golf n'a pas encore ses trous dans OpenStreetMap. Vous indiquerez le par de chaque trou pendant la partie : il sera mémorisé.</div><div class="seg mt" id="nh"><button data-n="9">9 trous</button><button class="on" data-n="18">18 trous</button></div></div>`)
-      + `<div class="btns"><button class="btn" id="go">Commencer la partie</button><button class="btn tinted" id="plan">${I.cal}Planifier une partie ici</button>
-         ${c.lat ? `<a class="btn gray" href="https://maps.apple.com/?daddr=${c.lat},${c.lon}&q=${encodeURIComponent(c.name)}" target="_blank" rel="noopener">${I.nav}Itinéraire</a>` : ''}</div>`;
+async function sheetCourse(entry) {
+  openSheet(sheetHead(esc(entry.name)) + `<div class="card pad" id="ci" style="text-align:center"><span class="spin"></span></div>`);
+  let course = null;
+  try { course = await loadCourse(entry); } catch {}
+  if (!$('#ci')) return;
+  const groups = course ? holeGroups(course).filter((g) => g.holes.filter((h) => h.par).length >= Math.min(9, g.holes.length)) : [];
+  let gi = 0, n = 18;
+  const draw = () => {
+    const g = groups[gi];
+    $('#ci').outerHTML = `<div id="ci">${groups.length > 1 ? `<div class="seg" style="margin-bottom:12px">${groups.map((x, i) => `<button data-g="${i}" class="${i === gi ? 'on' : ''}">${esc(x.name || 'Parcours ' + (i + 1))}</button>`).join('')}</div>` : ''}
+      ${g ? `<div class="card pad"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:20px">${g.holes.length} trous · Par ${sum(g.holes, (h) => h.par || 4)}</b><span class="pill acc">Plan GPS</span></div></div>
+         <div class="mt">${scorecardHTML({ holes: g.holes.map((h) => ({ par: h.par || 4, hcp: h.hcp, strokes: 0, putts: 0 })) })}</div>`
+      : `<div class="card pad"><b>Plan des trous pas encore disponible</b><div class="muted mt" style="font-size:15px">Ce golf n'a pas encore ses trous dans OpenStreetMap : vous aurez la carte de score (pars à saisir une fois, puis mémorisés).</div>
+         <div class="seg mt" id="nh"><button data-n="9">9 trous</button><button class="on" data-n="18">18 trous</button></div></div>`}
+      <div class="btns"><button class="btn" id="go">${g ? I.target + 'Jouer avec le plan GPS' : 'Commencer la partie'}</button>
+        <a class="btn gray" href="https://maps.apple.com/?daddr=${entry.lat},${entry.lon}&q=${encodeURIComponent(entry.name)}" target="_blank" rel="noopener">${I.nav}Itinéraire</a></div></div>`;
+    $$('#ci [data-g]').forEach((b) => (b.onclick = () => { gi = +b.dataset.g; draw(); }));
     $$('#nh button').forEach((b) => (b.onclick = () => { n = +b.dataset.n; $$('#nh button').forEach((x) => x.classList.toggle('on', x === b)); }));
-    $('#go').onclick = async () => { await startRound(c, n); closeSheet(); go('round'); };
-    $('#plan').onclick = () => sheetPlan(c.name);
-  });
+    $('#go').onclick = () => { startRound(entry, course, g || null, n); closeSheet(); go('round'); if (g) openPlay(); };
+  };
+  draw();
 }
-function sheetFreeRound() {
-  openSheet(sheetHead('Partie libre', 'data-a="free-go">Commencer')
-    + `<div class="group plain"><div class="field"><label>Parcours</label><input id="fr-name" placeholder="Nom du golf" value="${esc(S.golf?.name || '')}"></div>
-       <div class="field"><label>Trous</label><div class="seg" id="fr-n" style="width:170px"><button data-n="9">9</button><button class="on" data-n="18">18</button></div></div></div>`);
+function sheetFreeRound(name = '') {
+  openSheet(sheetHead('Partie', 'data-a="free-go">Commencer', 'Annuler')
+    + `<div class="group plain"><div class="field"><label>Golf</label><input id="fr-name" placeholder="Nom du golf" value="${esc(name)}"></div>
+       <div class="field"><label>Trous</label><div class="seg" id="fr-n" style="width:170px"><button data-n="9">9</button><button class="on" data-n="18">18</button></div></div></div>
+       <p class="foot">Sans plan GPS : carte de score uniquement.</p>`);
   $$('#fr-n button').forEach((b) => (b.onclick = () => $$('#fr-n button').forEach((x) => x.classList.toggle('on', x === b))));
 }
-function remForm(rem, isRound) {
-  const r = rem || { title: isRound ? 'Partie de golf' : 'Practice', days: ['TU', 'TH'], time: isRound ? '09:00' : '18:00', duration: isRound ? 270 : 60, alert: isRound ? 1440 : 30, note: '', where: '', date: isRound ? isoDay(new Date(Date.now() + 864e5)) : null };
-  return `<div class="group plain">
-      ${isRound ? '' : `<div class="field col" style="padding-top:12px;padding-bottom:12px"><div class="seg" id="rf-type">${['Practice', 'Putting', 'Petit jeu', 'Physique'].map((t) => `<button type="button" data-v="${t}" class="${r.title === t ? 'on' : ''}">${t}</button>`).join('')}</div></div>`}
-      <div class="field"><label>Titre</label><input id="rf-title" value="${esc(r.title)}"></div>
-      ${isRound ? `<div class="field"><label>Golf</label><input id="rf-where" value="${esc(r.where)}" placeholder="Nom du golf"></div>` : ''}
-    </div>
-    ${isRound ? `<div class="group plain mt"><div class="field"><label>Date</label><input type="date" id="rf-date" value="${r.date}"></div>` : `<div class="gh">Jours</div><div class="group plain"><div class="days" id="rf-days">${DAYS.map(([k, l]) => `<button type="button" data-v="${k}" class="${r.days.includes(k) ? 'on' : ''}">${l}</button>`).join('')}</div>`}
-      <div class="field"><label>Heure${isRound ? ' de départ' : ''}</label><input type="time" id="rf-time" value="${r.time}"></div>
-      <div class="field"><label>Durée</label><select id="rf-dur">${[[30, '30 min'], [45, '45 min'], [60, '1 h'], [90, '1 h 30'], [120, '2 h'], [150, '2 h 30 (9 trous)'], [270, '4 h 30 (18 trous)']].map(([v, l]) => `<option value="${v}" ${+r.duration === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-      <div class="field"><label>Alerte</label><select id="rf-alert">${ALERTS.map(([v, l]) => `<option value="${v}" ${+r.alert === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-    </div>
-    <div class="group plain mt"><div class="field col"><textarea id="rf-note" placeholder="Objectif de la séance (facultatif)">${esc(r.note)}</textarea></div></div>`;
+function sheetScore() {
+  const r = db.activeRound, h = r.holes[S.hole];
+  if (!h.strokes && h.shots?.length) h.strokes = h.shots.length + h.putts;
+  openSheet(sheetHead(`Trou ${S.hole + 1}`, `data-a="score-next">${S.hole + 1 < r.holes.length ? 'Trou suivant' : 'Terminer'}`, 'OK') + `<div class="card hole" id="holecard">${holeEditor(r, h)}</div>
+    <h2 class="sec">Carte de score</h2>${scorecardHTML(r, S.hole)}
+    <div class="btns"><button class="btn gray" data-a="round-menu">Options de la partie</button></div>`, () => updatePlay());
 }
-function readRemForm(isRound) {
-  const title = $('#rf-title').value.trim() || (isRound ? 'Partie de golf' : 'Entraînement');
-  const days = isRound ? [] : $$('#rf-days button.on').map((b) => b.dataset.v);
-  if (!isRound && !days.length) { toast('Choisissez au moins un jour'); return null; }
-  return { id: uid(), title, days, time: $('#rf-time').value || '18:00', duration: +$('#rf-dur').value, alert: +$('#rf-alert').value, note: $('#rf-note').value.trim(),
-    where: isRound ? $('#rf-where').value.trim() : '', date: isRound ? $('#rf-date').value || isoDay() : null };
-}
-function sheetRem(isRound = false, where = '') {
-  openSheet(sheetHead(isRound ? 'Planifier une partie' : 'Rappel d\'entraînement', `data-a="rem-save" data-round="${isRound ? 1 : ''}">Créer`) + remForm(null, isRound));
-  if (where) $('#rf-where').value = where;
-  $$('#rf-type button').forEach((b) => (b.onclick = () => { $$('#rf-type button').forEach((x) => x.classList.toggle('on', x === b)); $('#rf-title').value = b.dataset.v; }));
-  $$('#rf-days button').forEach((b) => (b.onclick = () => b.classList.toggle('on')));
-}
-const sheetPlan = (where = '') => sheetRem(true, where);
-function sheetRemDetail(rem) {
-  openSheet(sheetHead(esc(rem.title), '', 'Fermer')
-    + `<div class="card pad" style="text-align:center"><div style="font-size:15px" class="muted">${remWhen(rem)}${rem.where ? ' · ' + esc(rem.where) : ''}</div>
-       <div class="muted" style="font-size:14px;margin-top:4px">${ALERTS.find((a) => a[0] === rem.alert)?.[1] || ''}</div></div>
-     <div class="gh">Ajouter à mon calendrier</div>
-     <div class="btns"><button class="btn" data-a="ics" data-id="${rem.id}">${I.cal}Calendrier Apple / Outlook</button>
-       <a class="btn tinted" href="${esc(googleURL(rem))}" target="_blank" rel="noopener">${I.cal}Google Agenda</a>
-       <button class="btn danger" data-a="del-rem" data-id="${rem.id}">Supprimer le rappel</button></div>
-     <p class="foot">Sur iPhone, touchez « Calendrier Apple » puis « Ajouter » : l'alerte arrivera comme une notification.</p>`);
+function refreshScore() {
+  if ($('#sheet.on #holecard')) { const r = db.activeRound; $('#holecard').innerHTML = holeEditor(r, r.holes[S.hole]); $('#sheet .sc-wrap').outerHTML = scorecardHTML(r, S.hole); }
+  else render();
 }
 function sheetSession() {
-  openSheet(sheetHead('Nouvelle séance', 'data-a="session-save">Ajouter')
+  openSheet(sheetHead('Nouvelle séance', 'data-a="session-save">Ajouter', 'Annuler')
     + `<div class="group plain"><div class="field col" style="padding-top:12px;padding-bottom:12px"><div class="seg" id="ss-type" style="grid-auto-flow:row;grid-template-columns:repeat(3,1fr)">${SESSION_TYPES.map((t, i) => `<button type="button" data-v="${t}" class="${i ? '' : 'on'}">${t}</button>`).join('')}</div></div></div>
      <div class="group plain mt"><div class="field"><label>Date</label><input type="date" id="ss-date" value="${isoDay()}"></div>
        <div class="field"><label>Durée</label><select id="ss-dur">${[15, 30, 45, 60, 90, 120, 180, 240].map((v) => `<option value="${v}" ${v === 60 ? 'selected' : ''}>${v < 60 ? v + ' min' : Math.floor(v / 60) + ' h' + (v % 60 ? ' ' + (v % 60) : '')}</option>`).join('')}</select></div></div>
@@ -590,28 +649,10 @@ function sheetSession() {
   const single = (sel) => $$(sel + ' button').forEach((b) => (b.onclick = () => $$(sel + ' button').forEach((x) => x.classList.toggle('on', x === b))));
   single('#ss-type'); single('#ss-feel');
 }
-function sheetInsta(prefill = '') {
-  openSheet(sheetHead('Post favori', 'data-a="insta-save">Ajouter')
-    + `<div class="group plain"><div class="field"><label>Lien</label><input id="in-url" type="url" inputmode="url" placeholder="instagram.com/reel/…" value="${esc(prefill)}"></div>
-       <div class="field"><label>Titre</label><input id="in-title" placeholder="Ex. : drill de putting"></div></div>
-     <div class="gh">Catégorie</div><div class="group plain"><div class="field col" style="padding-top:12px;padding-bottom:12px"><div class="seg" id="in-cat" style="grid-auto-flow:row;grid-template-columns:repeat(4,1fr)">${INSTA_CATS.map((c, i) => `<button type="button" data-v="${c}" class="${i ? '' : 'on'}">${c}</button>`).join('')}</div></div></div>
-     <p class="foot">Dans Instagram, sous la vidéo : ➤ Partager → Copier le lien, puis collez-le ici.</p>`);
-  $$('#in-cat button').forEach((b) => (b.onclick = () => $$('#in-cat button').forEach((x) => x.classList.toggle('on', x === b))));
-  if (!prefill) setTimeout(() => $('#in-url')?.focus(), 350); else setTimeout(() => $('#in-title')?.focus(), 350);
-}
-function sheetLinkInsta() {
-  openSheet(sheetHead('Collection Instagram', 'data-a="insta-link-save">OK')
-    + `<div class="group plain"><div class="field"><label>Lien</label><input id="il-url" type="url" inputmode="url" placeholder="instagram.com/…/saved/golf/…" value="${esc(db.instaCollection)}"></div></div>
-     <div class="gh">Comment trouver ce lien</div>
-     <div class="card pad" style="font-size:15px;line-height:1.5">1. Dans Instagram, rangez vos posts golf dans une collection <b>« Golf »</b> (appui long sur ⧉ Enregistrer).<br>
-       2. Dans Safari, allez sur <b>instagram.com</b> et connectez-vous.<br>3. Profil → ☰ → <b>Enregistrements</b> → ouvrez la collection « Golf ».<br>4. Copiez l'adresse de la page et collez-la ici.</div>
-     <p class="foot">Instagram ne permet à aucune autre application de lire vos enregistrements : ce lien ouvre directement votre collection dans Instagram.</p>`);
-}
-async function sheetPlayer(id) {
+function sheetPlayer(id) {
   const s = S.swings.find((x) => x.id === id); if (!s) return;
   const url = URL.createObjectURL(s.blob);
-  openSheet(sheetHead(esc(s.label || 'Swing'), '', 'Fermer')
-    + `<div class="player"><video id="pv" src="${url}" playsinline controls autoplay muted loop></video></div>
+  openSheet(sheetHead('Swing') + `<div class="player"><video id="pv" src="${url}" playsinline controls autoplay muted loop></video></div>
        <div class="seg mt" id="rate">${[[0.25, '×¼'], [0.5, '×½'], [1, '×1']].map(([v, l]) => `<button data-v="${v}" class="${v === 0.5 ? 'on' : ''}">${l}</button>`).join('')}</div>
        <div class="btns two"><button class="btn gray" id="fb">‹ Image</button><button class="btn gray" id="ff">Image ›</button></div>`, () => URL.revokeObjectURL(url));
   const v = $('#pv'); v.playbackRate = 0.5; v.onloadedmetadata = () => (v.playbackRate = 0.5);
@@ -620,24 +661,19 @@ async function sheetPlayer(id) {
   $('#ff').onclick = () => { v.pause(); v.currentTime += 1 / 30; };
 }
 function sheetRoundView(r) {
-  openSheet(sheetHead(esc(r.course), '', 'Fermer')
-    + `<div class="card score-head"><div><b>${rStrokes(r)}</b><span>Score</span></div><div><b>${toPar(rDiff(r))}</b><span>Par</span></div><div><b>${sum(r.holes, (h) => h.putts)}</b><span>Putts</span></div></div>
+  openSheet(sheetHead(esc(r.course)) + `<div class="card score-head"><div><b>${rStrokes(r)}</b><span>Score</span></div><div><b>${toPar(rDiff(r))}</b><span>Par</span></div><div><b>${sum(r.holes, (h) => h.putts)}</b><span>Putts</span></div></div>
        <p class="foot" style="text-align:center;margin-bottom:12px">${fmtDay(r.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>${scorecardHTML(r)}
        <div class="btns"><button class="btn danger" data-a="del-round" data-id="${r.id}">Supprimer la partie</button></div>`);
 }
 function sheetRoundMenu() {
-  openSheet(sheetHead('Partie en cours', '', 'Fermer')
-    + `<div class="group plain"><button class="row" data-a="finish"><div class="main"><div class="t" style="color:var(--accent)">Terminer et enregistrer</div></div></button>
+  openSheet(sheetHead('Partie en cours') + `<div class="group plain"><button class="row" data-a="finish"><div class="main"><div class="t" style="color:var(--accent)">Terminer et enregistrer</div></div></button>
        <button class="row" data-a="abandon"><div class="main"><div class="t" style="color:var(--red)">Abandonner la partie</div></div></button></div>`);
 }
 
 /* ================= Caméra ================= */
-const CLUB_LABELS = ['Driver', 'Bois', 'Hybride', 'Fer long', 'Fer moyen', 'Fer court', 'Wedge', 'Chip', 'Putt'];
 async function camOn() {
-  try {
-    S.cam = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', frameRate: { ideal: 60 }, height: { ideal: 1080 } }, audio: false });
-    render();
-  } catch { toast('Caméra non autorisée. Utilisez ⬆ pour importer une vidéo.'); }
+  try { S.cam = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', frameRate: { ideal: 60 }, height: { ideal: 1080 } }, audio: false }); render(); }
+  catch { toast('Caméra non autorisée. Utilisez ⬆ pour importer une vidéo.'); }
 }
 function stopCam() { if (S.rec) S.rec.stop(); S.cam?.getTracks().forEach((t) => t.stop()); S.cam = null; }
 let timerI;
@@ -647,25 +683,20 @@ function toggleRec() {
   const mime = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find((m) => MediaRecorder.isTypeSupported?.(m)) || '';
   const chunks = [], rec = new MediaRecorder(S.cam, mime ? { mimeType: mime } : undefined);
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-  rec.onstop = () => { clearInterval(timerI); S.rec = null; askLabel(new Blob(chunks, { type: rec.mimeType || mime || 'video/webm' })); if (S.tab === 'swing') render(); };
+  rec.onstop = () => { clearInterval(timerI); S.rec = null; saveSwing(new Blob(chunks, { type: rec.mimeType || mime || 'video/webm' })); if (S.tab === 'swing') render(); };
   rec.start(); S.rec = rec; S.recStart = Date.now(); render();
   timerI = setInterval(() => { const t = $('#timer'), s = Math.floor((Date.now() - S.recStart) / 1000); if (t) t.textContent = `${Math.floor(s / 60)}:${pad2(s % 60)}`; }, 250);
 }
-function askLabel(blob) {
-  openSheet(sheetHead('Nouveau swing', 'data-a="swing-save">Enregistrer', 'Jeter')
-    + `<div class="gh">Club</div><div class="group plain"><div class="field col" style="padding-top:12px;padding-bottom:12px"><div class="seg" id="sw-club" style="grid-auto-flow:row;grid-template-columns:repeat(3,1fr)">${CLUB_LABELS.map((c, i) => `<button data-v="${c}" class="${i ? '' : 'on'}">${c}</button>`).join('')}</div></div></div>
-     <div class="group plain mt"><div class="field"><label>Note</label><input id="sw-note" placeholder="Ex. : backswing plus court"></div></div>`);
-  $$('#sw-club button').forEach((b) => (b.onclick = () => $$('#sw-club button').forEach((x) => x.classList.toggle('on', x === b))));
-  S.pendingSwing = blob;
+async function saveSwing(blob) {
+  try { const s = { id: uid(), date: new Date().toISOString(), blob }; await vPut(s); await loadSwings(); toast('Swing enregistré'); sheetPlayer(s.id); }
+  catch { toast('Espace insuffisant pour la vidéo'); }
 }
-async function loadSwings() { try { S.swings = (await vAll()).sort((a, b) => b.date.localeCompare(a.date)); } catch { S.swings = []; } if (S.tab === 'swing' && $('#swings')) $('#swings').innerHTML = swingsHTML(); }
+async function loadSwings() { try { S.swings = (await vAll()).sort((a, b) => b.date.localeCompare(a.date)); } catch { S.swings = []; } if ($('#swings')) $('#swings').innerHTML = swingsHTML(); }
 
-/* ================= Écran allumé ================= */
+/* ================= Écran allumé & sauvegarde ================= */
 let wakeLock = null;
 async function keepAwake() { if (!db.settings.wake || !db.activeRound || !('wakeLock' in navigator)) return; try { wakeLock = await navigator.wakeLock.request('screen'); } catch {} }
 function releaseWake() { wakeLock?.release?.(); wakeLock = null; }
-
-/* ================= Sauvegarde ================= */
 function exportData() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' }));
@@ -679,103 +710,64 @@ async function importData(e) {
 }
 
 /* ================= Actions ================= */
+const cur = () => db.activeRound.holes[S.hole];
 const A = {
   tab: (b) => go(b.dataset.t),
   close: closeSheet,
   settings: sheetSettings,
   export: exportData,
-  'start-detected': async () => { await startRound(S.golf, null); go('round'); },
-  'pick-course': (b) => sheetCourse($('#courses')._list[+b.dataset.i]),
-  'plan-round': () => sheetPlan(S.golf?.name || ''),
-  'free-round': sheetFreeRound,
-  'free-go': async () => { const n = +($('#fr-n button.on')?.dataset.n || 18); const name = $('#fr-name').value.trim() || 'Parcours';
-    await startRound(S.golf && S.golf.name === name ? S.golf : { name }, n); closeSheet(); go('round'); },
+  pick: (b) => { const c = S.index?.find((x) => x.id === b.dataset.id); if (!c) return; if (db.activeRound) { go('round'); return toast('Une partie est déjà en cours'); } sheetCourse(c); },
+  resume: () => { go('round'); if (db.activeRound.mapped) openPlay(); },
+  'free-round': () => sheetFreeRound(),
+  'free-named': (b) => sheetFreeRound(b.dataset.name),
+  'free-go': () => { const n = +($('#fr-n button.on')?.dataset.n || 18), name = $('#fr-name').value.trim() || 'Parcours'; startRound({ name }, null, null, n); closeSheet(); go('round'); },
+  'open-play': openPlay,
+  'close-play': closePlay,
   'round-menu': sheetRoundMenu,
-  st: (b) => { const h = db.activeRound.holes[S.hole], d = +b.dataset.d; h.strokes = h.strokes ? Math.max(1, Math.min(15, h.strokes + d)) : Math.max(1, h.par + d); if (h.putts >= h.strokes) h.putts = Math.max(0, h.strokes - 1); save(); render(); },
-  'st-par': () => { const h = db.activeRound.holes[S.hole]; if (!h.strokes) { h.strokes = h.par; save(); render(); } },
-  pu: (b) => { const h = db.activeRound.holes[S.hole]; h.putts = Math.max(0, Math.min(8, h.putts + +b.dataset.d)); if (h.putts >= h.strokes && h.putts) h.strokes = h.putts + 1; save(); render(); },
-  fw: (b) => { const h = db.activeRound.holes[S.hole]; h.fw = h.fw === b.dataset.v ? null : b.dataset.v; save(); render(); },
-  par: (b) => { db.activeRound.holes[S.hole].par = +b.dataset.v; save(); render(); },
+  st: (b) => { const h = cur(), d = +b.dataset.d; h.manual = true; h.strokes = h.strokes ? Math.max(1, Math.min(15, h.strokes + d)) : Math.max(1, h.par + d); if (h.putts >= h.strokes) h.putts = Math.max(0, h.strokes - 1); save(); refreshScore(); },
+  'st-par': () => { const h = cur(); h.manual = true; if (!h.strokes) { h.strokes = h.par; save(); refreshScore(); } },
+  pu: (b) => { const h = cur(); h.putts = Math.max(0, Math.min(8, h.putts + +b.dataset.d)); if (h.shots?.length && !h.manual) h.strokes = h.shots.length + h.putts; else if (h.putts >= h.strokes && h.putts) h.strokes = h.putts + 1; save(); refreshScore(); },
+  par: (b) => { cur().par = +b.dataset.v; save(); refreshScore(); },
   prev: () => { const n = db.activeRound.holes.length; S.hole = (S.hole - 1 + n) % n; render(); },
-  next: () => { const r = db.activeRound, n = r.holes.length; if (!r.holes[S.hole].strokes) r.holes[S.hole].strokes = r.holes[S.hole].par; save();
-    if (S.hole === n - 1 && played(r).length === n) { finishRound(); return; } S.hole = (S.hole + 1) % n; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
-  hole: (b) => { S.hole = +b.dataset.i; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+  next: () => { const r = db.activeRound, n = r.holes.length; if (!cur().strokes) cur().strokes = cur().par; save();
+    if (S.hole === n - 1 && played(r).length === n) return finishRound(); S.hole = (S.hole + 1) % n; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+  hole: (b) => { S.hole = +b.dataset.i; if ($('#sheet.on #holecard')) refreshScore(); else render(); if (S.play) showHole(true); },
+  'score-next': () => { if (!cur().strokes) cur().strokes = cur().par; save(); closeSheet(); goHole(S.hole + 1); },
+  'pv-prev': () => { if (S.hole > 0) goHole(S.hole - 1); },
+  'pv-next': () => goHole(S.hole + 1),
+  'pv-score': sheetScore,
+  shot: () => addShot(false),
+  motion: toggleMotion,
+  recenter: () => showHole(true),
   finish: () => { closeSheet(); finishRound(); },
-  abandon: () => { if (confirm('Abandonner la partie ? Elle ne sera pas enregistrée.')) { db.activeRound = null; save(); releaseWake(); closeSheet(); render(); } },
+  abandon: () => { if (confirm('Abandonner la partie ? Elle ne sera pas enregistrée.')) { db.activeRound = null; curCourse = null; save(); releaseWake(); closeSheet(); closePlay(); } },
   'view-round': (b) => { const r = db.rounds.find((x) => x.id === b.dataset.id); r && sheetRoundView(r); },
   'del-round': (b) => { if (!confirm('Supprimer cette partie ?')) return; db.rounds = db.rounds.filter((x) => x.id !== b.dataset.id); save(); closeSheet(); render(); },
   'cam-on': camOn,
   'cam-off': () => { stopCam(); render(); },
   rec: toggleRec,
-  play: (b) => sheetPlayer(b.dataset.id),
-  'swing-save': async () => {
-    const blob = S.pendingSwing; S.pendingSwing = null; if (!blob) return closeSheet();
-    const label = [$('#sw-club button.on')?.dataset.v, $('#sw-note').value.trim()].filter(Boolean).join(' — ');
-    try { await vPut({ id: uid(), date: new Date().toISOString(), label, blob }); toast('Swing enregistré'); } catch { toast('Espace insuffisant pour la vidéo'); }
-    closeSheet(); await loadSwings();
-  },
+  'play-swing': (b) => sheetPlayer(b.dataset.id),
   'del-swing': async (b) => { if (!confirm('Supprimer cette vidéo ?')) return; await vDel(b.dataset.id); loadSwings(); },
-  seg: (b) => { S.trainSeg = b.dataset.v; render(); },
   'new-session': sheetSession,
   'session-save': () => {
-    db.sessions.unshift({ id: uid(), type: $('#ss-type button.on').dataset.v, date: $('#ss-date').value || isoDay(), duration: +$('#ss-dur').value,
-      feeling: +$('#ss-feel button.on').dataset.v, notes: $('#ss-notes').value.trim() });
+    db.sessions.unshift({ id: uid(), type: $('#ss-type button.on').dataset.v, date: $('#ss-date').value || isoDay(), duration: +$('#ss-dur').value, feeling: +$('#ss-feel button.on').dataset.v, notes: $('#ss-notes').value.trim() });
     db.sessions.sort((a, b) => b.date.localeCompare(a.date)); save(); closeSheet(); render(); toast('Séance ajoutée');
   },
   'del-session': (b) => { if (!confirm('Supprimer cette séance ?')) return; db.sessions = db.sessions.filter((s) => s.id !== b.dataset.id); save(); render(); },
-  'new-insta': () => sheetInsta(),
-  'insta-save': () => {
-    const url = ($('#in-url').value.match(/https?:\/\/\S+/) || [($('#in-url').value.trim() ? 'https://' + $('#in-url').value.trim().replace(/^\/+/, '') : '')])[0];
-    let ok = false; try { ok = /(^|\.)instagram\.com$/.test(new URL(url).hostname); } catch {}
-    if (!ok) return toast('Collez un lien Instagram');
-    if (db.insta.some((x) => x.url === url)) return toast('Déjà dans vos favoris');
-    db.insta.unshift({ id: uid(), url, title: $('#in-title').value.trim(), cat: $('#in-cat button.on').dataset.v, date: new Date().toISOString() });
-    save(); closeSheet(); S.trainSeg = 'insta'; S.tab = 'train'; render(); toast('Post ajouté');
-  },
-  'del-insta': (b) => { if (!confirm('Retirer ce post ?')) return; db.insta = db.insta.filter((x) => x.id !== b.dataset.id); save(); render(); },
-  icat: (b) => { S.instaCat = b.dataset.v; render(); },
-  'link-insta': sheetLinkInsta,
-  'insta-link-save': () => {
-    const v = $('#il-url').value.trim();
-    if (v) { const url = /^https?:/.test(v) ? v : 'https://' + v; let ok = false; try { ok = /(^|\.)instagram\.com$/.test(new URL(url).hostname); } catch {}
-      if (!ok) return toast('Collez un lien instagram.com'); db.instaCollection = url; } else db.instaCollection = '';
-    save(); closeSheet(); render();
-  },
-  'new-rem': () => sheetRem(false),
-  'rem-save': (b) => { const isRound = !!b.dataset.round; const r = readRemForm(isRound); if (!r) return; db.reminders.push(r); save(); S.tab = 'rem'; render(); sheetRemDetail(r); },
-  'rem-open': (b) => { const r = db.reminders.find((x) => x.id === b.dataset.id); r && sheetRemDetail(r); },
-  ics: (b) => { const r = db.reminders.find((x) => x.id === b.dataset.id); r && addToApple(r); },
-  'del-rem': (b) => { if (!confirm('Supprimer ce rappel de l\'app ? (Pensez aussi à le retirer de votre calendrier.)')) return; db.reminders = db.reminders.filter((x) => x.id !== b.dataset.id); save(); closeSheet(); render(); },
 };
-document.addEventListener('click', (e) => {
-  const b = e.target.closest('[data-a]'); if (!b) return;
-  const f = A[b.dataset.a]; if (f) { e.preventDefault(); f(b); }
-});
-document.addEventListener('input', (e) => { if (e.target.id === 'q') searchCourses(e.target.value); });
-document.addEventListener('change', (e) => { if (e.target.id === 'swing-file') { const f = e.target.files[0]; if (f) askLabel(f); e.target.value = ''; } });
-/* Balayage gauche/droite pour changer de trou */
-let tx = null;
-document.addEventListener('touchstart', (e) => { tx = e.target.closest('#holecard') ? e.touches[0].clientX : null; }, { passive: true });
-document.addEventListener('touchend', (e) => {
-  if (tx == null || !db.activeRound) return; const dx = e.changedTouches[0].clientX - tx; tx = null;
-  if (Math.abs(dx) > 70) A[dx < 0 ? 'next' : 'prev']();
-}, { passive: true });
-
-/* Partage Android (Web Share Target) : ?url=…&text=… */
-function handleShare() {
-  const p = new URLSearchParams(location.search);
-  const m = [p.get('url'), p.get('text'), p.get('title')].filter(Boolean).join(' ').match(/https?:\/\/\S+/);
-  if (!p.toString()) return;
-  history.replaceState(null, '', location.pathname);
-  if (m) { S.tab = 'train'; S.trainSeg = 'insta'; render(); sheetInsta(m[0]); }
-}
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-a]'); if (!b) return; const f = A[b.dataset.a]; if (f) { e.preventDefault(); f(b); } });
+document.addEventListener('input', (e) => { if (e.target.id === 'q') { S.search = e.target.value; $('#courses').innerHTML = courseListHTML(); searchPhoton(S.search); } });
+document.addEventListener('change', (e) => { if (e.target.id === 'swing-file') { const f = e.target.files[0]; if (f) saveSwing(f); e.target.value = ''; } });
+let tx = null; // balayage pour changer de trou (carte de score)
+document.addEventListener('touchstart', (e) => { tx = e.target.closest('#view #holecard') ? e.touches[0].clientX : null; }, { passive: true });
+document.addEventListener('touchend', (e) => { if (tx == null || !db.activeRound) return; const dx = e.changedTouches[0].clientX - tx; tx = null; if (Math.abs(dx) > 70) A[dx < 0 ? 'next' : 'prev'](); }, { passive: true });
 
 /* ================= Démarrage ================= */
 render();
-handleShare();
+loadIndex();
 loadSwings();
+fetchWeather();
+startGPS();
 if (db.activeRound) keepAwake();
-locate();
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { locate(); keepAwake(); } });
-setInterval(() => document.visibilityState === 'visible' && locate(), 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { keepAwake(); fetchWeather(); } });
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
