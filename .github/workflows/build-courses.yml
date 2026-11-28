@@ -1,0 +1,41 @@
+name: Base de données des golfs
+
+on:
+  workflow_dispatch:
+    inputs:
+      lat: { description: 'Latitude du centre', default: '49.1145' }
+      lon: { description: 'Longitude du centre', default: '2.422' }
+      km: { description: 'Rayon en km', default: '50' }
+  schedule:
+    - cron: '17 4 1 * *' # le 1er de chaque mois
+
+permissions:
+  contents: write
+
+concurrency: { group: build-courses, cancel-in-progress: false }
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Télécharger les plans des golfs (OpenStreetMap)
+        run: node scripts/build-courses.mjs "${{ inputs.lat || '49.1145' }}" "${{ inputs.lon || '2.422' }}" "${{ inputs.km || '50' }}"
+      - name: Enregistrer dans main et gh-pages
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add courses
+          if git diff --cached --quiet; then echo "Aucun changement"; exit 0; fi
+          git commit -m "Mise à jour de la base des golfs"
+          git push origin HEAD:main
+          git fetch origin gh-pages
+          git checkout -B pages origin/gh-pages
+          git checkout main -- courses
+          git add courses
+          git diff --cached --quiet || git commit -m "Mise à jour de la base des golfs"
+          git push origin pages:gh-pages
