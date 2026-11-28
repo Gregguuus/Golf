@@ -6,8 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Signets">
 <meta name="mobile-web-app-capable" content="yes">
-<link rel="manifest" href="/manifest.json">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script src="sg.js"></script>
 <title>Signets</title>
 <style>
 :root{color-scheme:dark;--bg:#3a4557;--card:rgba(255,255,255,.10);--card2:rgba(255,255,255,.17);--ink:#fff;--mute:rgba(255,255,255,.76);--line:rgba(255,255,255,.20);--acc:#fff;--accink:#1d2736}
@@ -103,15 +104,33 @@ const SO=['Printemps','Été','Automne','Hiver',"Toute l'année"];
 const SE={Printemps:'🌸','Été':'☀️',Automne:'🍂',Hiver:'❄️',"Toute l'année":'🥕'};
 let D=[],view='home',cur='',acc='',S='Toutes',I='',q='',lim=40,sheetId=null;
 
-async function api(path,body){
-  const r=await fetch(path,body?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}:{});
-  if(r.status===401){loginScreen();throw new Error('auth')}
-  return r.json();
-}
+const GH='Gregguuus/Golf';
+const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+let RECENT=new Set(),AUTHCAT={};
+const mapRec=m=>({id:m.id,url:m.u,author:m.a,title:m.t,snippet:m.s,tags:m.g||[],ts:m.ts||0,category:m.c,r:!!m.r,ings:m.i||[],season:m.se||'',tp:m.tp,cp:m.cp,gen:m.gen,caption:m.cap||''});
+const urlKey=u=>String(u).split('?')[0].replace(/\/+$/,'').replace(/\/(?:reels?|p|tv)\//,'/x/');
 function loginScreen(){
-  $('#app').innerHTML=`<div class="login"><h1>Signets</h1><p class="note">Entre ton code d’accès (une seule fois sur cet appareil).</p><input id="code" type="password" autocomplete="current-password" placeholder="Code d’accès"><button class="btn" id="go">Entrer</button><p class="note" id="lerr"></p></div>`;
+  $('#app').innerHTML=`<div class="login"><h1>Signets</h1><p class="note">Cette appli est privée. Ouvre le lien personnel que je t’ai donné (il se termine par <b>#k=…</b>) : il suffit de le faire une seule fois sur cet appareil.</p></div>`;
 }
-async function load(){D=await api('/api/bookmarks')}
+async function load(){
+  if(!SG.hasKey()){loginScreen();throw new Error('nokey')}
+  const m=await SG.json('data/meta.bin');
+  const ov=Object.assign({},lsGet('sg-ov',{}));
+  D=m.b.map(mapRec);RECENT=new Set(m.rp||[]);
+  const cc={};D.forEach(b=>{(cc[b.author]=cc[b.author]||{})[b.category]=(cc[b.author][b.category]||0)+1});
+  for(const a in cc)AUTHCAT[a]=Object.entries(cc[a]).sort((x,y)=>y[1]-x[1])[0][0];
+  // ajouts faits depuis GitHub (déchiffrés ici) puis ajouts locaux pas encore synchronisés
+  let extra=[];
+  try{const L=await (await fetch('adds/list.json',{cache:'no-cache'})).json();
+    extra=(await Promise.all(L.map(id=>SG.addRecord('adds/'+encodeURIComponent(id)+'.json').catch(()=>null)))).filter(Boolean).map(r=>({id:r.id,url:r.u,author:r.a,title:r.t,snippet:r.s,tags:r.g||[],ts:r.ts||0,category:r.c,r:!!r.r,ings:r.i||[],season:r.se||'',caption:r.cap||'',img:r.img||''}))}catch(e){}
+  const have=new Set(D.map(b=>urlKey(b.url)));
+  extra.forEach(b=>{if(!have.has(urlKey(b.url))){if(AUTHCAT[b.author])b.category=AUTHCAT[b.author];D.push(b);have.add(urlKey(b.url))}});
+  const loc=lsGet('sg-add',[]).filter(b=>!have.has(urlKey(b.url)));
+  lsSet('sg-add',loc);D.push(...loc);
+  D.forEach(b=>{if(ov[b.author])b.category=ov[b.author]});
+  D.sort((x,y)=>(y.ts||0)-(x.ts||0));
+}
 
 const EM={'Jardin & plantes':'🌿','Cuisine':'🍳','Restos & bonnes adresses':'🍽️','Voyage & sorties':'🧭','Livres, histoire & culture':'📚','Développement personnel':'🚀','Couple & relations':'💞','Tech & IA':'🤖','Sport & rugby':'🏉','Golf':'⛳','Montres & mode':'⌚','Langues':'🗣️','Famille & enfants':'🧸','Design & photo':'🎨','Maison & bricolage':'🛠️','Humour':'😂','Actualité & société':'📰','Autre':'📌'};
 const SHORT={'Restos & bonnes adresses':'Restos','Livres, histoire & culture':'Livres & culture','Développement personnel':'Dév. perso','Couple & relations':'Couple','Voyage & sorties':'Voyage','Jardin & plantes':'Jardin','Famille & enfants':'Famille','Design & photo':'Design','Maison & bricolage':'Maison','Actualité & société':'Actualité','Sport & rugby':'Sport'};
@@ -122,10 +141,17 @@ function col(o){
   const tag=o.href?'a':'button',at=o.href?`href="${o.href}"`:'';
   return `<${tag} class="wc" ${at} ${o.attr||''}><span class="lab">${esc(o.lab)}</span><span class="bar" style="height:${o.h||330}px"><span class="fill" style="height:${o.fill}%;--c:${o.color}"></span><span class="top">${o.icon}</span><span class="big">${o.big??''}</span><span class="bot">${o.arrow||ARW}${o.sub?`<span class="sub">${o.sub}</span>`:''}</span></span></${tag}>`;
 }
+const imgTag=b=>b.img?`<img src="${esc(b.img)}" alt="">`:(b.tp!=null?`<img data-th="${esc(b.id)}" alt="">`:`<img loading="lazy" src="${SG.cover(b)}" alt="">`);
+async function hydrate(){
+  const imgs=[...document.querySelectorAll('img[data-th]')];
+  const by=new Map();
+  for(const im of imgs){const b=D.find(x=>x.id===im.dataset.th);if(!b)continue;const p=SG.thumbPack(b,view==='home'?RECENT:null);if(p){if(!by.has(p))by.set(p,[]);by.get(p).push([im,b])}}
+  for(const [p,l] of by){await p;for(const [im,b] of l){const u=SG.thumb(b.id);if(u)im.src=u;else im.src=SG.cover(b)}}
+}
 const dayLabel=b=>b.ts?new Date(b.ts*1000).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):'';
 const kindOf=u=>String(u).includes('/reel')?'Reel':String(u).includes('/tv/')?'Vidéo':'Post';
 const card=b=>{const k=kindOf(b.url),t=b.title||'',sn=b.snippet||'',rest=(sn.startsWith(t)?sn.slice(t.length):sn).trim();
-return `<button class="card" data-open="${esc(b.id)}"><div class="im">${b.th?`<img loading="lazy" src="/thumb/${esc(b.id)}.jpg" alt="" onerror="this.remove()">`:''}<span>${esc((b.author||'?')[0].toUpperCase())}</span><em class="kd">${k==='Reel'?'▶ ':''}${k}</em></div><div class="tx"><b>${esc(t||sn||'(sans texte)')}</b>${rest.length>8?`<p class="sn">${esc(rest)}</p>`:''}<small>@${esc(b.author)} · ${esc(b.category||'')}${b.r?' · 🍳 Recette':''}</small></div></button>`};
+return `<button class="card" data-open="${esc(b.id)}"><div class="im">${imgTag(b)}<span>${esc((b.author||'?')[0].toUpperCase())}</span><em class="kd">${k==='Reel'?'▶ ':''}${k}</em></div><div class="tx"><b>${esc(t||sn||'(sans texte)')}</b>${rest.length>8?`<p class="sn">${esc(rest)}</p>`:''}<small>@${esc(b.author)} · ${esc(b.category||'')}${b.r?' · 🍳 Recette':''}</small></div></button>`};
 const grid=l=>`<div class="grid">${l.slice(0,lim).map(card).join('')}</div>${l.length>lim?`<button class="more" data-more>Voir plus (${l.length-lim})</button>`:''}`;
 const ic=n=>({home:'<path d="M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',rec:'<path d="M4 3v8a3 3 0 0 0 3 3v7M7 3v6M10 3v8a3 3 0 0 1-3 3M17 21V3c-2.5 1-4 4-4 8h4"/>',search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',add:'<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>'}[n]);
 const tabs=()=>`<nav class="tabs">${[['home','Accueil'],['rec','Recettes'],['search','Chercher'],['add','Ajouter']].map(([k,l])=>`<button data-go="${k}" aria-current="${view===k||(k==='home'&&view==='cat')}"><svg viewBox="0 0 24 24">${ic(k)}</svg>${l}</button>`).join('')}</nav>`;
@@ -137,9 +163,9 @@ function home(){
   const nrec=Object.values(sn).reduce((a,b)=>a+b,0)||1,smx=Math.max(1,...Object.values(sn));
   const TOOLS=[['carte','📍','Carte restos','#c04a36'],['plans','🍎','Plans','#2c86b8'],['google','🗺️','Google Maps','#2c86b8'],['menus','🥕','Menus','#d9822b'],['golf','⛳','Golf','#5f9e43'],['bilan','📊','Bilan','#7b5db5'],['cadeaux','🎁','Cadeaux','#d0507a']];
   return `<h1>Signets</h1><p class="sub0">${nf(tot)} signets · ${ents.length} catégories</p><button class="search" data-go="search">Rechercher un compte, un mot…</button>
-  <a class="addr" href="/outils.html#carte"><span class="ai">📍</span><span class="at"><b>Mes restos Instagram</b><small>Carte de Paris par arrondissement</small></span><span class="ac">›</span></a>
-  <div class="row2"><a class="pill" href="/outils.html#plans">🍎 Plans d’Apple</a><a class="pill" href="/outils.html#google">🗺️ Google Maps</a></div>
-  <h2>Mes outils</h2><div class="cols">${TOOLS.map(([k,e,l,c])=>col({href:'/outils.html#'+k,lab:l,icon:e,big:'',fill:38,color:c,h:250})).join('')}</div>
+  <a class="addr" href="outils.html#carte"><span class="ai">📍</span><span class="at"><b>Mes restos Instagram</b><small>Carte de Paris par arrondissement</small></span><span class="ac">›</span></a>
+  <div class="row2"><a class="pill" href="outils.html#plans">🍎 Plans d’Apple</a><a class="pill" href="outils.html#google">🗺️ Google Maps</a></div>
+  <h2>Mes outils</h2><div class="cols">${TOOLS.map(([k,e,l,c])=>col({href:'outils.html#'+k,lab:l,icon:e,big:'',fill:38,color:c,h:250})).join('')}</div>
   <h2>Ajoutés récemment</h2><div class="strip">${D.slice(0,12).map(b=>`<div class="rc"><div class="dl">${esc(dayLabel(b))}</div>${card(b)}</div>`).join('')}</div>
   <h2>Catégories</h2><div class="cols">${ents.map(([c,n])=>col({lab:SHORT[c]||c,icon:EM[c]||'📌',big:nf(n),sub:Math.max(1,Math.round(n/tot*100))+' %',fill:Math.max(12,Math.round(n/mx*74)),color:COL[c]||'#888',attr:`data-cat="${esc(c)}"`})).join('')}</div>
   <h2>Cuisine</h2><div class="cols">${SO.map(s=>col({lab:s,icon:SE[s],big:sn[s]||0,sub:Math.round((sn[s]||0)/nrec*100)+' %',fill:Math.max(12,Math.round((sn[s]||0)/smx*74)),color:'#d9822b',h:300,attr:`data-season="${esc(s)}"`})).join('')}</div>`;
@@ -167,16 +193,19 @@ const addView=()=>`<h1>Ajouter</h1>
 <h2>Un post</h2><input id="u" placeholder="Colle le lien du post Instagram" inputmode="url" autocapitalize="off" autocorrect="off">
 <details class="opt"><summary>Ajouter aussi la légende (facultatif)</summary><textarea id="cap" rows="4" placeholder="Colle la légende ici"></textarea></details>
 <button class="btn" id="addbtn">Ajouter</button><div id="addres" class="note"></div>
-<h2>Importer mon export Instagram</h2><p class="note">Le fichier saved_posts.json de ton export. À faire une fois, ou pour rattraper des posts récents.</p>
-<label class="btn alt">Choisir le fichier<input id="file" type="file" accept=".json,application/json" hidden></label><div id="impres" class="note"></div>
-<h2>Miniatures</h2><div id="status" class="note">…</div><button class="btn alt" id="retry">Relancer les miniatures en échec</button>`;
+<h2>Synchronisation</h2><div id="status" class="note">…</div>
+<details class="opt"><summary>Envoi automatique vers GitHub (facultatif)</summary>
+<p class="note">Sans ceci, un ajout reste sur cet appareil jusqu’à ce que tu le valides sur GitHub (un appui). Avec un jeton GitHub limité aux « Issues » du dépôt Golf, l’envoi est automatique et le post garde sa miniature sur tous tes appareils.</p>
+<input id="gh" type="password" placeholder="Jeton GitHub (github_pat_…)" autocomplete="off"><button class="btn alt" id="ghsave">Enregistrer le jeton</button></details>`;
 async function loadStatus(){
-  try{const s=await api('/api/status');if(!$('#status'))return;
-    $('#status').innerHTML=`${s.ok} vraies miniatures${s.gen?` · ${s.gen} couvertures dessinées`:''} sur ${s.total}${s.todo?` · ${s.todo} en attente`:''}${s.fail?` · ${s.fail} introuvables`:''}.<br>Elles arrivent automatiquement en arrière-plan.${s.paused_until?'<br>Instagram demande une pause : reprise vers '+new Date(s.paused_until).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+'.':''}`}catch(e){}
+  const e=$('#status');if(!e)return;
+  const real=D.filter(b=>b.tp!=null||b.img).length;
+  e.innerHTML=`${nf(D.length)} signets · ${nf(real)} vraies miniatures · les autres ont une couverture dessinée.<br>Tout est chiffré : seule ta clé personnelle peut le lire.`;
+  const t=lsGet('sg-gh','');const i=$('#gh');if(i&&t)i.value=t;
 }
 function sheet(b){
   if(!b)return '';
-  return `<div class="sheet"><div><button class="back" data-x>Fermer</button><div class="im" data-embed="${esc(b.url)}" role="button" aria-label="Lire ici">${b.th?`<img src="/thumb/${esc(b.id)}.jpg" alt="" onerror="this.remove()">`:''}<span>${esc((b.author||'?')[0].toUpperCase())}</span>${kindOf(b.url)!=='Post'?'<em class="pl" aria-hidden="true">▶</em>':''}</div>
+  return `<div class="sheet"><div><button class="back" data-x>Fermer</button><div class="im" data-embed="${esc(b.url)}" role="button" aria-label="Lire ici">${imgTag(b)}<span>${esc((b.author||'?')[0].toUpperCase())}</span>${kindOf(b.url)!=='Post'?'<em class="pl" aria-hidden="true">▶</em>':''}</div>
   <h1 style="font-size:22px;margin-top:12px">${esc(b.title||'(sans titre)')}</h1><p class="note">${kindOf(b.url)} · ${esc(b.category||"")} · @${esc(b.author)}${b.ts?' · '+new Date(b.ts*1000).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):''}</p>
   <p id="cap" style="white-space:pre-wrap">${esc(b.snippet)}</p>${b.r?`<div class="chips">${(b.ings||[]).map(x=>`<i>${esc(x)}</i>`).join('')}<i>${SE[b.season]||''} ${esc(b.season)}</i></div>`:''}
   <p class="note" style="margin-top:14px">Catégorie du compte @${esc(b.author)}</p><select data-move="${esc(b.author)}">${CATS.map(c=>`<option${c===b.category?' selected':''}>${esc(c)}</option>`).join('')}</select>
@@ -188,43 +217,28 @@ function render(){
   $('#app').innerHTML=`<main>${v}</main>${tabs()}${sheetId?sheet(D.find(b=>b.id===sheetId)):''}`;
   if(view==='search')showRes();
   if(view==='add')loadStatus();
+  hydrate();
 }
 function go(v){view=v;lim=40;sheetId=null;render();scrollTo(0,0)}
 
-const fix=s=>{s=String(s);if(/[^\u0000-\u00ff]/.test(s))return s;try{return new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.from(s,c=>c.charCodeAt(0)))}catch(e){return s}};
-function extract(j){
-  const arr=Array.isArray(j)?j:(j.saved_saved_media||Object.values(j).find(Array.isArray)||[]),out=[];
-  for(const x of arr){
-    const d={};
-    (function w(n){if(Array.isArray(n))n.forEach(w);else if(n&&typeof n==='object'){if('label' in n&&'value' in n){const k=fix(n.label);if(!(k in d))d[k]=fix(n.value)}Object.values(n).forEach(w)}})(x.label_values||x);
-    let url=d['URL']||d['Url']||'';
-    if(!url){const m=JSON.stringify(x).match(/https:\\?\/\\?\/www\.instagram\.com\\?\/(?:p|reel|reels|tv)\\?\/[\w-]+/);if(m)url=m[0].replace(/\\/g,'')}
-    url=url.split('?')[0];if(!url)continue;
-    out.push({url,user:d['Nom de profil']||d['Profile name']||d['Username']||'',name:d['Nom']||d['Name']||'',cap:d['Légende']||d['Caption']||'',ts:x.timestamp||0});
-  }
-  return out;
-}
-async function doImport(f){
-  const msg=t=>{const e=$('#impres');if(e)e.textContent=t};
-  msg('Lecture du fichier…');let items;
-  try{items=extract(JSON.parse(await f.text()))}catch(e){return msg('Fichier illisible : prends le saved_posts.json au format JSON.')}
-  if(!items.length)return msg('Aucun post trouvé dans ce fichier.');
-  let added=0;
-  for(let i=0;i<items.length;i+=250){
-    msg(`Import et classement… ${Math.min(i+250,items.length)} / ${items.length}`);
-    const r=await api('/api/import',{items:items.slice(i,i+250)});if(r.error)return msg(r.error);added+=r.added;
-  }
-  await load();render();msg(`${added} nouveaux posts importés et rangés (${items.length-added} déjà présents).`);
-}
+const cleanUrl=s=>{const t=String(s).split(/\s+/).find(x=>x.includes('instagram.com/'))||String(s);return t.split('?')[0].replace(/\/+$/,'')+'/'};
 async function doAdd(){
-  const u=$('#u').value.trim();if(!u)return;const out=$('#addres');out.textContent='Ajout en cours…';
-  try{
-    const r=await api('/api/add',{url:u,caption:$('#cap').value});
-    if(r.error){out.textContent=r.error;return}
-    const b=r.bookmark;D=D.some(x=>x.id===b.id)?D.map(x=>x.id===b.id?b:x):[b,...D];
-    out.innerHTML=(r.added?'Ajouté ✅':'Déjà dans tes signets')+(r.note?'<br>'+esc(r.note):'')+'<div style="max-width:180px;margin-top:10px">'+card(b)+'</div>';
-    $('#u').value='';$('#cap').value='';
-  }catch(e){}
+  const out=$('#addres'),raw=$('#u').value.trim();if(!raw)return;
+  const url=cleanUrl(raw),m=url.match(/instagram\.com\/(?:([\w.]+)\/)?(p|reel|reels|tv)\/([\w-]+)/);
+  if(!m){out.textContent='Ce n’est pas un lien de post Instagram.';return}
+  const cap=$('#cap').value.trim(),user=m[1]||'',id=m[3];
+  const C=await import('./classify.js');
+  let cat=AUTHCAT[user],info={is:false,ings:[],season:''};
+  if(!cat)cat=C.decide([C.scoreOf({cap,user,name:''})])[0];
+  if(cat==='Cuisine')info=C.recipeInfo(cap);
+  const rec={id,url,author:user,title:C.titleOf(cap),snippet:C.snippetOf(cap),tags:C.tagsOf(cap),ts:Math.floor(Date.now()/1000),category:cat,r:info.is,ings:info.ings,season:info.season,caption:cap};
+  if(D.some(x=>urlKey(x.url)===urlKey(url))){out.textContent='Déjà dans tes signets.';return}
+  D.unshift(rec);lsSet('sg-add',[rec,...lsGet('sg-add',[])]);
+  let sync='';const tok=lsGet('sg-gh','');
+  if(tok){try{const r=await fetch('https://api.github.com/repos/'+GH+'/issues',{method:'POST',headers:{authorization:'Bearer '+tok,accept:'application/vnd.github+json'},body:JSON.stringify({title:url,body:cap})});sync=r.ok?'Envoyé à GitHub : la miniature arrive d’ici une minute.':'GitHub a refusé le jeton ('+r.status+').'}catch(e){sync='Envoi impossible pour l’instant.'}}
+  else sync=`<a class="btn alt" target="_blank" rel="noopener" href="https://github.com/${GH}/issues/new?title=${encodeURIComponent(url)}&body=${encodeURIComponent(cap)}">Valider sur GitHub (un appui) pour le garder partout</a>`;
+  out.innerHTML='Ajouté ✅<br>'+sync+'<div style="max-width:180px;margin-top:10px">'+card(rec)+'</div>';
+  $('#u').value='';$('#cap').value='';hydrate();
 }
 document.addEventListener('click',async e=>{
   const t=e.target;
@@ -234,12 +248,11 @@ document.addEventListener('click',async e=>{
     const n=document.createElement('p');n.className='note';n.textContent='Chargement du lecteur Instagram… Si rien ne s’affiche : post privé, supprimé ou bloqué par Instagram.';
     if(em.classList.contains('im')){em.replaceWith(f);f.after(n)}else{$('#emb').replaceChildren(f,n);em.remove()}return}
   if(t.classList.contains('sheet')){sheetId=null;return render()}
-  if(t.id==='go'){const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:$('#code').value})});if(r.ok){await load();render()}else $('#lerr').textContent='Code incorrect.';return}
+  if(t.id==='ghsave'){lsSet('sg-gh',$('#gh').value.trim());M2('Jeton enregistré');return}
   if(t.id==='addbtn')return doAdd();
-  if(t.id==='retry'){await api('/api/retry',{});return loadStatus()}
   const el=t.closest('[data-open],[data-go],[data-cat],[data-season],[data-acc],[data-s],[data-i],[data-x],[data-more]');if(!el)return;
   const d=el.dataset;
-  if(d.open!==undefined){sheetId=d.open;render();fetch('/api/caption/'+encodeURIComponent(d.open)).then(r=>r.json()).then(j=>{const e=$('#cap');if(e&&j.caption)e.textContent=j.caption}).catch(()=>{})}
+  if(d.open!==undefined){sheetId=d.open;render();{const b=D.find(x=>x.id===d.open);if(b)SG.caption(b).then(c=>{const e=$('#cap');if(e&&c)e.textContent=c}).catch(()=>{})}}
   else if(d.x!==undefined){sheetId=null;render()}
   else if(d.go!==undefined)go(d.go);
   else if(d.cat!==undefined){cur=d.cat;acc='';view='cat';lim=40;render();scrollTo(0,0)}
@@ -254,10 +267,10 @@ document.addEventListener('change',async e=>{
   const t=e.target;
   if(t.id==='file'&&t.files[0])return doImport(t.files[0]);
   if(t.dataset.move!==undefined){
-    const a=t.dataset.move,c=t.value;await api('/api/move',{author:a,category:c});
+    const a=t.dataset.move,c=t.value;const o=lsGet('sg-ov',{});o[a]=c;lsSet('sg-ov',o);
     D.forEach(b=>{if(b.author===a)b.category=c});render();
   }
 });
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='code')$('#go').click()});
-(async()=>{try{await load();render()}catch(e){}})();
+const M2=t=>{const e=$('#addres');if(e)e.textContent=t};
+(async()=>{try{await load();render()}catch(e){if(e.message!=='nokey')$('#app').innerHTML='<div class="login"><h1>Signets</h1><p class="note">Impossible de lire les données. Vérifie ta connexion puis recharge ; si cela persiste, rouvre ton lien personnel.</p></div>'}})();
 </script></body></html>

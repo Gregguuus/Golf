@@ -1,0 +1,10 @@
+{
+  "name": "Signets",
+  "short_name": "Signets",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#3a4557",
+  "theme_color": "#4a586b",
+  "icons": [{ "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }]
+}

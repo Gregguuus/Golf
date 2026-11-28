@@ -5,7 +5,9 @@
 <meta name="theme-color" content="#1f6f5c">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Signets">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<script src="sg.js"></script>
 <title>Outils · Signets</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Inter:wght@400;500;600&display=swap">
 <style>
@@ -113,7 +115,7 @@ td,th{padding:3px 10px 3px 0;text-align:left;border-bottom:1px solid var(--line)
 </head><body>
 <div class="wrap">
   <header>
-    <p style="margin:0 0 6px"><a href="/" style="text-decoration:none;font-weight:600">← Mes signets</a></p>
+    <p style="margin:0 0 6px"><a href="./" style="text-decoration:none;font-weight:600">← Mes signets</a></p>
     <h1>Mes outils</h1>
     <p class="sub" id="sub">Tes enregistrements Instagram transformés en outils : où manger, quoi cuisiner, ton bilan, ton golf et quoi offrir.</p>
   </header>
@@ -344,8 +346,8 @@ function vGoogle(){
   const n=DATA.places.length+DATA.far.length;
   return `<div class="note"><h3>Tes ${n} adresses dans Google Maps</h3><p style="margin:6px 0 0">Google Maps ne permet pas d’importer une liste directement. Le moyen officiel est <b>Mes cartes</b> (Google My Maps) : tu importes un fichier sur ordinateur, et ta carte apparaît ensuite dans l’app Google Maps du téléphone (Enregistrés, puis Cartes).</p></div>
   <div class="gifts">
-   <a class="gift" href="/export/restos.kml" download style="text-decoration:none;color:inherit"><b style="font-family:var(--display);font-size:18px">Fichier KML (recommandé)</b><p>10 calques, un par type de cuisine, avec le nom, l’adresse et le lien du post Instagram.</p><div class="f"><span>${n} adresses</span><span style="color:var(--acc);font-weight:600">Télécharger ↓</span></div></a>
-   <a class="gift" href="/export/restos.csv" download style="text-decoration:none;color:inherit"><b style="font-family:var(--display);font-size:18px">Fichier CSV</b><p>Un tableau (nom, adresse, latitude, longitude, type, compte, lien) pour Excel ou pour d’autres outils.</p><div class="f"><span>${n} adresses</span><span style="color:var(--acc);font-weight:600">Télécharger ↓</span></div></a>
+   <a class="gift" href="#" data-dl="kml" style="text-decoration:none;color:inherit"><b style="font-family:var(--display);font-size:18px">Fichier KML (recommandé)</b><p>10 calques, un par type de cuisine, avec le nom, l’adresse et le lien du post Instagram.</p><div class="f"><span>${n} adresses</span><span style="color:var(--acc);font-weight:600">Télécharger ↓</span></div></a>
+   <a class="gift" href="#" data-dl="csv" style="text-decoration:none;color:inherit"><b style="font-family:var(--display);font-size:18px">Fichier CSV</b><p>Un tableau (nom, adresse, latitude, longitude, type, compte, lien) pour Excel ou pour d’autres outils.</p><div class="f"><span>${n} adresses</span><span style="color:var(--acc);font-weight:600">Télécharger ↓</span></div></a>
   </div>
   <div class="panel"><h2>Comment faire (2 minutes)</h2>
    <ol style="margin:10px 0 0;padding-left:20px;display:grid;gap:8px">
@@ -402,8 +404,25 @@ document.addEventListener('pointermove',e=>{
   if(bar){const ch=bar.closest('.chart'),tt=ch.querySelector('.tip'),r=ch.getBoundingClientRect();tt.hidden=false;tt.textContent=bar.dataset.tt;tt.style.left=(e.clientX-r.left)+'px';tt.style.top=(e.clientY-r.top)+'px'}
 });
 
-fetch('/outils-data.json',{credentials:'same-origin'}).then(r=>{if(r.status===401){location.href='/';throw new Error('auth')}return r.json()}).then(d=>{DATA=d;
+SG.json('data/outils.bin').then(d=>{DATA=d;
   $('#sub').textContent=`Tes ${nf(d.bilan.total)} enregistrements Instagram transformés en outils : ${nf(d.places.length+d.far.length)} adresses sur une carte, ${nf(d.rec.length)} recettes pour composer tes menus, ${nf(d.golf.length)} vidéos golf rangées par thème, ton bilan et tes idées cadeaux.`;
-  render()}).catch(()=>{$('#out').innerHTML='<p class="loading">Impossible de charger tes signets. Recharge la page.</p>'});
+  render()}).catch(e=>{if(!SG.hasKey())location.href='./';else $('#out').innerHTML='<p class="loading">Impossible de charger tes signets. Recharge la page.</p>'});
+
+document.addEventListener('click',e=>{
+  const a=e.target.closest&&e.target.closest('[data-dl]');if(!a||!DATA)return;e.preventDefault();
+  const P=[...DATA.places,...DATA.far].filter(p=>p.lat&&p.lon);
+  const xe=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  let txt,type,name;
+  if(a.dataset.dl==='kml'){
+    const by={};P.forEach(p=>(by[p.t]=by[p.t]||[]).push(p));
+    txt='<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Restos Instagram</name>'+Object.entries(by).map(([t,L])=>'<Folder><name>'+xe(t)+'</name>'+L.map(p=>'<Placemark><name>'+xe(p.n)+'</name><description>'+xe(p.a+' - post de @'+p.acc+' : '+p.u)+'</description><Point><coordinates>'+p.lon+','+p.lat+',0</coordinates></Point></Placemark>').join('')+'</Folder>').join('')+'</Document></kml>';
+    type='application/vnd.google-earth.kml+xml';name='restos-instagram.kml';
+  }else{
+    const q=t=>'"'+String(t??'').replace(/"/g,'""')+'"';
+    txt='﻿'+[['Nom','Adresse','Latitude','Longitude','Type','Compte','Lien']].concat(P.map(p=>[p.n,p.a,p.lat,p.lon,p.t,'@'+p.acc,p.u])).map(r=>r.map(q).join(',')).join('\r\n');
+    type='text/csv;charset=utf-8';name='restos-instagram.csv';
+  }
+  const l=document.createElement('a');l.href=URL.createObjectURL(new Blob([txt],{type}));l.download=name;document.body.appendChild(l);l.click();l.remove();
+});
 </script>
 </body></html>
