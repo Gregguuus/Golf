@@ -111,7 +111,8 @@ let RECENT=new Set(),AUTHCAT={};
 const mapRec=m=>({id:m.id,url:m.u,author:m.a,title:m.t,snippet:m.s,tags:m.g||[],ts:m.ts||0,category:m.c,r:!!m.r,ings:m.i||[],season:m.se||'',tp:m.tp,cp:m.cp,gen:m.gen,caption:m.cap||''});
 const urlKey=u=>String(u).split('?')[0].replace(/\/+$/,'').replace(/\/(?:reels?|p|tv)\//,'/x/');
 function loginScreen(){
-  $('#app').innerHTML=`<div class="login"><h1>Signets</h1><p class="note">Cette appli est privée. Ouvre le lien personnel que je t’ai donné (il se termine par <b>#k=…</b>) : il suffit de le faire une seule fois sur cet appareil.</p></div>`;
+  $('#app').innerHTML=`<div class="login"><h1>Signets</h1><p class="note">Cette appli est privée. Ouvre le lien personnel que je t’ai donné (il se termine par <b>#k=…</b>) : il suffit de le faire une seule fois sur cet appareil.</p><p class="note">Ou collez-le ici :</p><input id="sgk" type="url" autocomplete="off" placeholder="https://…/signets/#k=…" style="width:100%;padding:12px;border-radius:12px;border:1px solid #ccc;font-size:16px;margin-bottom:10px"><button class="btn" id="sgkgo" style="width:100%">Ouvrir mes signets</button></div>`;
+  document.getElementById('sgkgo').onclick=()=>{const m=(document.getElementById('sgk').value||'').match(/k=([\w-]{20,})/);if(!m){alert('Collez le lien complet, qui finit par #k=…');return}try{localStorage.setItem('sg-k',m[1])}catch(e){}location.reload()};
 }
 async function load(){
   if(!SG.hasKey()){loginScreen();throw new Error('nokey')}

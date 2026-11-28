@@ -538,7 +538,11 @@ document.addEventListener('pointerup', () => { dragLine = null; });
 const TABS = [['today', 'Aujourd\'hui', 'today'], ['round', 'Partie', 'flag'], ['swing', 'Swing', 'video'], ['journal', 'Journal', 'train'], ['signets', 'Signets', 'bookmark']];
 function renderTabbar() { $('#tabbar').innerHTML = TABS.map(([k, l, ic]) => `<button data-a="tab" data-t="${k}" class="${S.tab === k ? 'on' : ''}">${I[ic]}<span>${l}</span></button>`).join(''); }
 function go(tab) {
-  if (tab === 'signets') { location.href = 'signets/'; return; }
+  if (tab === 'signets') {
+    let has = false; try { has = !!localStorage.getItem('sg-k'); } catch {}
+    if (has) { location.href = 'signets/'; return; }
+    return sheetSigKey();
+  }
   if (S.tab === 'swing' && tab !== 'swing') stopCam();
   S.tab = tab; if (!S.play) { render(); window.scrollTo(0, 0); }
 }
@@ -772,6 +776,15 @@ const LEGAL = {
 };
 function sheetLegal(k) { const [t, body] = LEGAL[k]; openSheet(sheetHead(t) + `<div class="card pad legal">${body}</div>`); }
 
+function sheetSigKey() {
+  openSheet(sheetHead('Signets', 'data-a="sig-save">Ouvrir', 'Annuler')
+    + `<div class="card pad" style="font-size:15px;line-height:1.5">Vos signets sont chiffrés : il faut votre <b>lien personnel</b> (il finit par <b>#k=…</b>), une seule fois sur cet iPhone.<br>
+       Il se trouve dans votre conversation Claude « <b>Kobo : Mots</b> ». Copiez-le et collez-le ici.</div>
+     <div class="group plain mt"><div class="field"><label>Lien</label><input id="sig-url" type="url" inputmode="url" autocomplete="off" placeholder="https://…/signets/#k=…"></div></div>
+     <p class="foot">Le lien reste uniquement sur votre iPhone.</p>`);
+  setTimeout(() => $('#sig-url')?.focus(), 350);
+}
+
 /* ================= Présentation (premier lancement) ================= */
 const ONB = [
   ['target', 'Chaque trou, vu du ciel', 'Le plan satellite de votre golf, la distance au drapeau en direct, et un point de visée à déplacer du doigt.'],
@@ -870,6 +883,12 @@ const A = {
   onboarding: () => { closeSheet(); onbStep = 0; showOnboarding(); },
   'onb-next': () => { onbStep++; showOnboarding(); },
   'onb-skip': endOnboarding,
+  'sig-save': () => {
+    const m = ($('#sig-url').value || '').match(/k=([\w-]{20,})/);
+    if (!m) return toast('Collez le lien complet, qui finit par #k=…');
+    try { localStorage.setItem('sg-k', m[1]); } catch { return toast('Impossible d\'enregistrer la clé'); }
+    closeSheet(); location.href = 'signets/';
+  },
   'onb-geo': endOnboarding,
   viseur: openViseur,
   'close-viseur': closeViseur,
