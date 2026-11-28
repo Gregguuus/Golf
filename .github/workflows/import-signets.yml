@@ -1,0 +1,32 @@
+name: import-signets
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "URL source"
+        required: true
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Télécharger
+        run: |
+          set -e
+          mkdir -p signets/data signets/_src
+          for f in $(curl -fsS "${{ inputs.base }}/list.txt"); do
+            case "$f" in
+              src/*) curl -fsS --retry 3 "${{ inputs.base }}/$f" -o "signets/_src/${f#src/}" ;;
+              *) curl -fsS --retry 3 "${{ inputs.base }}/$f" -o "signets/data/$f" ;;
+            esac
+          done
+          du -sh signets/data signets/_src
+      - name: Enregistrer
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add signets
+          git commit -m "Import des signets (chiffrés)" || exit 0
+          git push
