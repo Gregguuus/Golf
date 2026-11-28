@@ -31,6 +31,7 @@ jobs:
           git add signets/adds
           git commit -m "Nouveau signet" || exit 0
           for i in 1 2 3; do git pull --rebase origin main && git push && break; sleep 3; done
+          git push origin HEAD:gh-pages
       - name: Fermer la demande
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
