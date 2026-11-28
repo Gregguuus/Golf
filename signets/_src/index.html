@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#4a586b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Signets">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Signets</title>
+<style>
+:root{color-scheme:dark;--bg:#3a4557;--card:rgba(255,255,255,.10);--card2:rgba(255,255,255,.17);--ink:#fff;--mute:rgba(255,255,255,.76);--line:rgba(255,255,255,.20);--acc:#fff;--accink:#1d2736}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{background:#2f3949}
+body::before{content:"";position:fixed;inset:0;z-index:-1;background:linear-gradient(180deg,#5b6d83 0%,#4a586b 32%,#3a4557 66%,#2c3544 100%)}
+body{margin:0;background:transparent;color:var(--ink);font:16px/1.4 -apple-system,"SF Pro Display",system-ui,"Segoe UI",Inter,sans-serif;padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+main{max-width:720px;margin:auto;padding:calc(18px + env(safe-area-inset-top)) 18px 20px}
+h1{font-size:42px;font-weight:700;letter-spacing:-.03em;margin:10px 0 6px;line-height:1.05}
+h2{font-size:30px;font-weight:700;letter-spacing:-.02em;color:var(--ink);margin:36px 0 14px;line-height:1.1}
+.sub0{margin:0 0 18px;color:var(--mute);font-size:17px}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+input,textarea,select{font:inherit;color:var(--ink);background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:13px 15px;width:100%;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+input::placeholder,textarea::placeholder{color:var(--mute)}
+option{color:#111}
+:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.search{width:100%;background:var(--card);border:1.5px solid var(--line);border-radius:22px;padding:15px 18px;color:var(--mute);font-size:17px;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.cols{display:flex;gap:14px;scroll-padding-left:18px;overflow-x:auto;margin:0 -18px;padding:2px 18px 12px;scroll-snap-type:x proximity;scrollbar-width:none}
+.cols::-webkit-scrollbar{display:none}
+.wc{flex:0 0 112px;scroll-snap-align:start;display:flex;flex-direction:column;align-items:center;gap:12px;color:inherit;text-decoration:none}
+.wc .lab{display:flex;align-items:flex-end;justify-content:center;text-align:center;height:40px;font-size:15px;font-weight:500;line-height:1.15;color:var(--mute)}
+.wc .bar{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:space-between;width:112px;border-radius:44px;background:var(--card);border:1.5px solid var(--line);overflow:hidden;padding:26px 0 22px;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.wc .fill{position:absolute;left:0;right:0;bottom:0;background:var(--c);opacity:.5}
+.wc .top,.wc .big,.wc .bot{position:relative;display:flex;flex-direction:column;align-items:center}
+.wc .top{font-size:46px;line-height:1}
+.wc .big{font-size:44px;font-weight:600;letter-spacing:-.02em}
+.wc .bot{gap:12px}
+.wc .sub{display:flex;align-items:center;gap:6px;flex-direction:row;font-size:21px;font-weight:500;color:rgba(255,255,255,.9)}
+.wc:active .bar{background:var(--card2)}
+.strip{display:flex;gap:14px;scroll-padding-left:18px;overflow-x:auto;margin:0 -18px;padding:0 18px 8px;scroll-snap-type:x proximity;scrollbar-width:none}
+.strip::-webkit-scrollbar{display:none}
+.rc{flex:0 0 138px;min-width:0;max-width:138px;scroll-snap-align:start}
+.dl{height:30px;display:flex;align-items:flex-end;padding-left:8px;font-size:15px;font-weight:500;color:var(--mute);margin-bottom:10px}
+.strip .im{aspect-ratio:3/4.4;border-radius:44px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px 14px}
+@media(min-width:620px){.grid{grid-template-columns:repeat(3,1fr)}}
+.card{display:block;width:100%;align-self:start}
+.im{position:relative;aspect-ratio:1;border-radius:28px;overflow:hidden;background:var(--card);border:1.5px solid var(--line);display:grid;place-items:center;color:var(--mute);font-size:32px;font-weight:600}
+.im img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.tx b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:15px;font-weight:600;margin-top:9px;line-height:1.25}
+.tx small{color:var(--mute);font-size:13px;display:block;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.list{background:var(--card);border:1.5px solid var(--line);border-radius:28px;overflow:hidden;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.row{display:flex;align-items:center;gap:12px;width:100%;padding:16px 18px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}.row i{width:12px;height:12px;border-radius:50%;flex:none}.row span{flex:1}.row em{font-style:normal;color:var(--mute)}.row::after{content:"›";color:var(--mute);font-size:22px}
+.pills{display:flex;gap:8px;overflow-x:auto;margin:0 -18px 6px;padding:2px 18px 8px;scrollbar-width:none}
+.pills::-webkit-scrollbar{display:none}
+.pill{white-space:nowrap;background:var(--card);border:1.5px solid var(--line);border-radius:99px;padding:9px 16px;font-size:15px;flex:none;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.pill[aria-pressed=true]{background:#fff;border-color:#fff;color:var(--accink);font-weight:600}
+.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(44,53,68,.62);-webkit-backdrop-filter:blur(22px) saturate(1.4);backdrop-filter:blur(22px) saturate(1.4);border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom));z-index:10}
+.tabs button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11.5px;color:var(--mute);padding:4px}
+.tabs button[aria-current=true]{color:#fff;font-weight:600}
+.tabs svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.sheet{position:fixed;inset:0;background:rgba(14,19,27,.55);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);z-index:20;display:flex;align-items:flex-end}
+.sheet>div{background:linear-gradient(180deg,#566880 0%,#3a4557 100%);border:1.5px solid var(--line);border-bottom:0;width:100%;max-height:92vh;overflow:auto;border-radius:40px 40px 0 0;padding:18px 20px calc(24px + env(safe-area-inset-bottom));max-width:720px;margin:auto}
+.btn{display:block;width:100%;text-align:center;background:#fff;color:var(--accink);border-radius:22px;padding:15px;font-weight:600;text-decoration:none;margin-top:12px;border:1.5px solid #fff}
+.btn.alt{background:var(--card);color:var(--ink);border-color:var(--line);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.back{color:#fff;padding:6px 0;margin-bottom:4px;font-size:17px;font-weight:500}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.chips i{font-style:normal;background:var(--card);border:1.5px solid var(--line);border-radius:99px;padding:4px 12px;font-size:13.5px}
+.note{color:var(--mute);font-size:14.5px;margin:8px 0}
+.more{display:block;margin:20px auto;background:var(--card);border:1.5px solid var(--line);border-radius:99px;padding:13px 26px}
+details.opt{margin-top:10px}details.opt summary{color:var(--mute);font-size:14.5px;padding:6px 0}
+.login{max-width:360px;margin:20vh auto 0;padding:0 20px}
+.kd{position:absolute;left:10px;top:10px;font-size:11.5px;font-style:normal;font-weight:600;background:rgba(20,26,36,.62);color:#fff;border-radius:99px;padding:3px 9px;letter-spacing:.02em}
+.sn{margin:3px 0 0;font-size:13px;line-height:1.35;color:var(--mute);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.sheet{animation:fadeIn .22s ease-out}
+.sheet>div{animation:slideUp .34s cubic-bezier(.2,.9,.3,1)}
+@keyframes fadeIn{from{opacity:0}}
+@keyframes slideUp{from{transform:translateY(70px);opacity:.3}}
+.sheet .im{cursor:pointer}
+.sheet .im img{animation:kb 10s ease-in-out infinite alternate}
+@keyframes kb{from{transform:scale(1)}to{transform:scale(1.14)}}
+.pl{position:absolute;right:14px;bottom:14px;width:58px;height:58px;border-radius:50%;background:rgba(255,255,255,.92);color:#1d2736;display:grid;place-items:center;font-style:normal;font-size:22px;padding-left:4px;animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(1.1)}}
+@media(prefers-reduced-motion:reduce){.sheet,.sheet>div,.sheet .im img,.pl{animation:none}}
+.wxsum{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.wxsum span{background:var(--card);border:1.5px solid var(--line);border-radius:99px;padding:7px 14px;font-size:14.5px}
+.idea{background:var(--card);border:1.5px solid var(--line);border-radius:28px;padding:16px 18px;margin:0 0 14px;font-size:16px;color:var(--mute)}
+.idea b{display:block;font-size:21px;color:var(--ink);margin-bottom:3px;letter-spacing:-.01em}
+.addr{display:flex;align-items:center;gap:14px;background:var(--card);border:1.5px solid var(--line);border-radius:28px;padding:16px 18px;margin:18px 0 10px;color:inherit;text-decoration:none;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.addr .ai{font-size:34px;line-height:1}.addr .at{flex:1}.addr b{display:block;font-size:19px;letter-spacing:-.01em}.addr small{color:var(--mute);font-size:14.5px}.addr .ac{color:var(--mute);font-size:28px}
+.row2{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+a.pill{text-decoration:none;color:inherit;display:inline-block}
+</style></head><body>
+<div id="app"></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const COL={'Jardin & plantes':'#3f8f5a','Cuisine':'#d9822b','Restos & bonnes adresses':'#c04a36','Voyage & sorties':'#2c86b8','Livres, histoire & culture':'#7b5db5','Développement personnel':'#c99a1d','Couple & relations':'#d0507a','Tech & IA':'#3a68c9','Sport & rugby':'#26907f','Golf':'#5f9e43','Montres & mode':'#6f6f7c','Langues':'#a8601a','Famille & enfants':'#d99a2f','Design & photo':'#b247a3','Maison & bricolage':'#85673f','Humour':'#d9a812','Actualité & société':'#52606d','Autre':'#85909a'};
+const CATS=Object.keys(COL);
+const SO=['Printemps','Été','Automne','Hiver',"Toute l'année"];
+const SE={Printemps:'🌸','Été':'☀️',Automne:'🍂',Hiver:'❄️',"Toute l'année":'🥕'};
+let D=[],view='home',cur='',acc='',S='Toutes',I='',q='',lim=40,sheetId=null;
+
+async function api(path,body){
+  const r=await fetch(path,body?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}:{});
+  if(r.status===401){loginScreen();throw new Error('auth')}
+  return r.json();
+}
+function loginScreen(){
+  $('#app').innerHTML=`<div class="login"><h1>Signets</h1><p class="note">Entre ton code d’accès (une seule fois sur cet appareil).</p><input id="code" type="password" autocomplete="current-password" placeholder="Code d’accès"><button class="btn" id="go">Entrer</button><p class="note" id="lerr"></p></div>`;
+}
+async function load(){D=await api('/api/bookmarks')}
+
+const EM={'Jardin & plantes':'🌿','Cuisine':'🍳','Restos & bonnes adresses':'🍽️','Voyage & sorties':'🧭','Livres, histoire & culture':'📚','Développement personnel':'🚀','Couple & relations':'💞','Tech & IA':'🤖','Sport & rugby':'🏉','Golf':'⛳','Montres & mode':'⌚','Langues':'🗣️','Famille & enfants':'🧸','Design & photo':'🎨','Maison & bricolage':'🛠️','Humour':'😂','Actualité & société':'📰','Autre':'📌'};
+const SHORT={'Restos & bonnes adresses':'Restos','Livres, histoire & culture':'Livres & culture','Développement personnel':'Dév. perso','Couple & relations':'Couple','Voyage & sorties':'Voyage','Jardin & plantes':'Jardin','Famille & enfants':'Famille','Design & photo':'Design','Maison & bricolage':'Maison','Actualité & société':'Actualité','Sport & rugby':'Sport'};
+const nf=n=>Number(n).toLocaleString('fr-FR');
+const ARW='<svg width="30" height="30" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 34V8M9 18l11-11 11 11" stroke="rgba(255,255,255,.88)" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round" transform="rotate(45 20 20)"/></svg>';
+const DROP='<svg width="14" height="19" viewBox="0 0 20 28" aria-hidden="true"><path d="M10 2C10 2 3 12 3 18a7 7 0 0 0 14 0C17 12 10 2 10 2z" fill="#7cc4f5"/></svg>';
+function col(o){
+  const tag=o.href?'a':'button',at=o.href?`href="${o.href}"`:'';
+  return `<${tag} class="wc" ${at} ${o.attr||''}><span class="lab">${esc(o.lab)}</span><span class="bar" style="height:${o.h||330}px"><span class="fill" style="height:${o.fill}%;--c:${o.color}"></span><span class="top">${o.icon}</span><span class="big">${o.big??''}</span><span class="bot">${o.arrow||ARW}${o.sub?`<span class="sub">${o.sub}</span>`:''}</span></span></${tag}>`;
+}
+const dayLabel=b=>b.ts?new Date(b.ts*1000).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):'';
+const kindOf=u=>String(u).includes('/reel')?'Reel':String(u).includes('/tv/')?'Vidéo':'Post';
+const card=b=>{const k=kindOf(b.url),t=b.title||'',sn=b.snippet||'',rest=(sn.startsWith(t)?sn.slice(t.length):sn).trim();
+return `<button class="card" data-open="${esc(b.id)}"><div class="im">${b.th?`<img loading="lazy" src="/thumb/${esc(b.id)}.jpg" alt="" onerror="this.remove()">`:''}<span>${esc((b.author||'?')[0].toUpperCase())}</span><em class="kd">${k==='Reel'?'▶ ':''}${k}</em></div><div class="tx"><b>${esc(t||sn||'(sans texte)')}</b>${rest.length>8?`<p class="sn">${esc(rest)}</p>`:''}<small>@${esc(b.author)} · ${esc(b.category||'')}${b.r?' · 🍳 Recette':''}</small></div></button>`};
+const grid=l=>`<div class="grid">${l.slice(0,lim).map(card).join('')}</div>${l.length>lim?`<button class="more" data-more>Voir plus (${l.length-lim})</button>`:''}`;
+const ic=n=>({home:'<path d="M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',rec:'<path d="M4 3v8a3 3 0 0 0 3 3v7M7 3v6M10 3v8a3 3 0 0 1-3 3M17 21V3c-2.5 1-4 4-4 8h4"/>',search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',add:'<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>'}[n]);
+const tabs=()=>`<nav class="tabs">${[['home','Accueil'],['rec','Recettes'],['search','Chercher'],['add','Ajouter']].map(([k,l])=>`<button data-go="${k}" aria-current="${view===k||(k==='home'&&view==='cat')}"><svg viewBox="0 0 24 24">${ic(k)}</svg>${l}</button>`).join('')}</nav>`;
+
+function home(){
+  if(!D.length)return `<h1>Signets</h1><p class="note">Aucun signet pour l’instant. Va dans « Ajouter » pour importer ton export Instagram.</p>`;
+  const cnt={},sn={};D.forEach(b=>{cnt[b.category]=(cnt[b.category]||0)+1;if(b.r)sn[b.season]=(sn[b.season]||0)+1});
+  const ents=Object.entries(cnt).sort((a,b)=>b[1]-a[1]),mx=ents[0][1],tot=D.length;
+  const nrec=Object.values(sn).reduce((a,b)=>a+b,0)||1,smx=Math.max(1,...Object.values(sn));
+  const TOOLS=[['carte','📍','Carte restos','#c04a36'],['plans','🍎','Plans','#2c86b8'],['google','🗺️','Google Maps','#2c86b8'],['menus','🥕','Menus','#d9822b'],['golf','⛳','Golf','#5f9e43'],['bilan','📊','Bilan','#7b5db5'],['cadeaux','🎁','Cadeaux','#d0507a']];
+  return `<h1>Signets</h1><p class="sub0">${nf(tot)} signets · ${ents.length} catégories</p><button class="search" data-go="search">Rechercher un compte, un mot…</button>
+  <a class="addr" href="/outils.html#carte"><span class="ai">📍</span><span class="at"><b>Mes restos Instagram</b><small>Carte de Paris par arrondissement</small></span><span class="ac">›</span></a>
+  <div class="row2"><a class="pill" href="/outils.html#plans">🍎 Plans d’Apple</a><a class="pill" href="/outils.html#google">🗺️ Google Maps</a></div>
+  <h2>Mes outils</h2><div class="cols">${TOOLS.map(([k,e,l,c])=>col({href:'/outils.html#'+k,lab:l,icon:e,big:'',fill:38,color:c,h:250})).join('')}</div>
+  <h2>Ajoutés récemment</h2><div class="strip">${D.slice(0,12).map(b=>`<div class="rc"><div class="dl">${esc(dayLabel(b))}</div>${card(b)}</div>`).join('')}</div>
+  <h2>Catégories</h2><div class="cols">${ents.map(([c,n])=>col({lab:SHORT[c]||c,icon:EM[c]||'📌',big:nf(n),sub:Math.max(1,Math.round(n/tot*100))+' %',fill:Math.max(12,Math.round(n/mx*74)),color:COL[c]||'#888',attr:`data-cat="${esc(c)}"`})).join('')}</div>
+  <h2>Cuisine</h2><div class="cols">${SO.map(s=>col({lab:s,icon:SE[s],big:sn[s]||0,sub:Math.round((sn[s]||0)/nrec*100)+' %',fill:Math.max(12,Math.round((sn[s]||0)/smx*74)),color:'#d9822b',h:300,attr:`data-season="${esc(s)}"`})).join('')}</div>`;
+}
+function catView(){
+  const L=D.filter(b=>b.category===cur),a={};L.forEach(b=>a[b.author]=(a[b.author]||0)+1);
+  const F=acc?L.filter(b=>b.author===acc):L;
+  return `<button class="back" data-go="home">‹ Catégories</button><h1>${esc(cur)}</h1><p class="note">${F.length} signets</p>${cur==='Cuisine'?'<button class="btn alt" data-go="rec" style="margin:0 0 12px">🥕 Saisons et ingrédients</button>':''}<div class="pills">${Object.entries(a).sort((x,y)=>y[1]-x[1]).slice(0,15).map(([k,n])=>`<button class="pill" data-acc="${esc(k)}" aria-pressed="${k===acc}">@${esc(k)} ${n}</button>`).join('')}</div>${grid(F)}`;
+}
+function recView(){
+  const R=D.filter(b=>b.r),c={};R.forEach(b=>b.ings.forEach(x=>c[x]=(c[x]||0)+1));
+  const F=R.filter(b=>(S==='Toutes'||b.season===S)&&(!I||b.ings.includes(I)));
+  let body='';
+  if(S==='Toutes'&&!I){for(const s of SO){const l=F.filter(b=>b.season===s);if(l.length)body+=`<h2>${SE[s]} ${esc(s)} · ${l.length}</h2>`+grid(l)}}else body=grid(F);
+  return `<h1>Recettes</h1><div class="pills">${['Toutes',...SO].map(s=>`<button class="pill" data-s="${esc(s)}" aria-pressed="${s===S}">${s==='Toutes'?'Toutes':SE[s]+' '+esc(s)}</button>`).join('')}</div><div class="pills">${Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,30).map(([k,n])=>`<button class="pill" data-i="${esc(k)}" aria-pressed="${k===I}">${esc(k)} ${n}</button>`).join('')}</div>${R.length?body:'<p class="note">Aucune recette pour l’instant.</p>'}`;
+}
+const searchView=()=>`<h1>Chercher</h1><input id="q" type="search" placeholder="Compte, mot, hashtag, ingrédient…" value="${esc(q)}"><div id="res" style="margin-top:14px"></div>`;
+function showRes(){
+  const n=norm(q).trim();if(!$('#res'))return;
+  if(!n){$('#res').innerHTML='<p class="note">Tape pour chercher dans tes '+D.length+' signets.</p>';return}
+  const L=D.filter(b=>norm([b.author,b.title,b.snippet,(b.tags||[]).join(' '),(b.ings||[]).join(' ')].join(' ')).includes(n));
+  $('#res').innerHTML=`<p class="note">${L.length} résultat${L.length>1?'s':''}</p>`+grid(L);
+}
+const addView=()=>`<h1>Ajouter</h1>
+<h2>Un post</h2><input id="u" placeholder="Colle le lien du post Instagram" inputmode="url" autocapitalize="off" autocorrect="off">
+<details class="opt"><summary>Ajouter aussi la légende (facultatif)</summary><textarea id="cap" rows="4" placeholder="Colle la légende ici"></textarea></details>
+<button class="btn" id="addbtn">Ajouter</button><div id="addres" class="note"></div>
+<h2>Importer mon export Instagram</h2><p class="note">Le fichier saved_posts.json de ton export. À faire une fois, ou pour rattraper des posts récents.</p>
+<label class="btn alt">Choisir le fichier<input id="file" type="file" accept=".json,application/json" hidden></label><div id="impres" class="note"></div>
+<h2>Miniatures</h2><div id="status" class="note">…</div><button class="btn alt" id="retry">Relancer les miniatures en échec</button>`;
+async function loadStatus(){
+  try{const s=await api('/api/status');if(!$('#status'))return;
+    $('#status').innerHTML=`${s.ok} vraies miniatures${s.gen?` · ${s.gen} couvertures dessinées`:''} sur ${s.total}${s.todo?` · ${s.todo} en attente`:''}${s.fail?` · ${s.fail} introuvables`:''}.<br>Elles arrivent automatiquement en arrière-plan.${s.paused_until?'<br>Instagram demande une pause : reprise vers '+new Date(s.paused_until).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+'.':''}`}catch(e){}
+}
+function sheet(b){
+  if(!b)return '';
+  return `<div class="sheet"><div><button class="back" data-x>Fermer</button><div class="im" data-embed="${esc(b.url)}" role="button" aria-label="Lire ici">${b.th?`<img src="/thumb/${esc(b.id)}.jpg" alt="" onerror="this.remove()">`:''}<span>${esc((b.author||'?')[0].toUpperCase())}</span>${kindOf(b.url)!=='Post'?'<em class="pl" aria-hidden="true">▶</em>':''}</div>
+  <h1 style="font-size:22px;margin-top:12px">${esc(b.title||'(sans titre)')}</h1><p class="note">${kindOf(b.url)} · ${esc(b.category||"")} · @${esc(b.author)}${b.ts?' · '+new Date(b.ts*1000).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):''}</p>
+  <p id="cap" style="white-space:pre-wrap">${esc(b.snippet)}</p>${b.r?`<div class="chips">${(b.ings||[]).map(x=>`<i>${esc(x)}</i>`).join('')}<i>${SE[b.season]||''} ${esc(b.season)}</i></div>`:''}
+  <p class="note" style="margin-top:14px">Catégorie du compte @${esc(b.author)}</p><select data-move="${esc(b.author)}">${CATS.map(c=>`<option${c===b.category?' selected':''}>${esc(c)}</option>`).join('')}</select>
+  <button class="btn" data-embed="${esc(b.url)}">▶ Voir ici, sans quitter l’app</button><div id="emb"></div>
+  <a class="btn alt" href="${esc(b.url)}" target="_blank" rel="noopener">Ouvrir sur Instagram</a></div></div>`;
+}
+function render(){
+  const v={home,cat:catView,rec:recView,search:searchView,add:addView}[view]();
+  $('#app').innerHTML=`<main>${v}</main>${tabs()}${sheetId?sheet(D.find(b=>b.id===sheetId)):''}`;
+  if(view==='search')showRes();
+  if(view==='add')loadStatus();
+}
+function go(v){view=v;lim=40;sheetId=null;render();scrollTo(0,0)}
+
+const fix=s=>{s=String(s);if(/[^\u0000-\u00ff]/.test(s))return s;try{return new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.from(s,c=>c.charCodeAt(0)))}catch(e){return s}};
+function extract(j){
+  const arr=Array.isArray(j)?j:(j.saved_saved_media||Object.values(j).find(Array.isArray)||[]),out=[];
+  for(const x of arr){
+    const d={};
+    (function w(n){if(Array.isArray(n))n.forEach(w);else if(n&&typeof n==='object'){if('label' in n&&'value' in n){const k=fix(n.label);if(!(k in d))d[k]=fix(n.value)}Object.values(n).forEach(w)}})(x.label_values||x);
+    let url=d['URL']||d['Url']||'';
+    if(!url){const m=JSON.stringify(x).match(/https:\\?\/\\?\/www\.instagram\.com\\?\/(?:p|reel|reels|tv)\\?\/[\w-]+/);if(m)url=m[0].replace(/\\/g,'')}
+    url=url.split('?')[0];if(!url)continue;
+    out.push({url,user:d['Nom de profil']||d['Profile name']||d['Username']||'',name:d['Nom']||d['Name']||'',cap:d['Légende']||d['Caption']||'',ts:x.timestamp||0});
+  }
+  return out;
+}
+async function doImport(f){
+  const msg=t=>{const e=$('#impres');if(e)e.textContent=t};
+  msg('Lecture du fichier…');let items;
+  try{items=extract(JSON.parse(await f.text()))}catch(e){return msg('Fichier illisible : prends le saved_posts.json au format JSON.')}
+  if(!items.length)return msg('Aucun post trouvé dans ce fichier.');
+  let added=0;
+  for(let i=0;i<items.length;i+=250){
+    msg(`Import et classement… ${Math.min(i+250,items.length)} / ${items.length}`);
+    const r=await api('/api/import',{items:items.slice(i,i+250)});if(r.error)return msg(r.error);added+=r.added;
+  }
+  await load();render();msg(`${added} nouveaux posts importés et rangés (${items.length-added} déjà présents).`);
+}
+async function doAdd(){
+  const u=$('#u').value.trim();if(!u)return;const out=$('#addres');out.textContent='Ajout en cours…';
+  try{
+    const r=await api('/api/add',{url:u,caption:$('#cap').value});
+    if(r.error){out.textContent=r.error;return}
+    const b=r.bookmark;D=D.some(x=>x.id===b.id)?D.map(x=>x.id===b.id?b:x):[b,...D];
+    out.innerHTML=(r.added?'Ajouté ✅':'Déjà dans tes signets')+(r.note?'<br>'+esc(r.note):'')+'<div style="max-width:180px;margin-top:10px">'+card(b)+'</div>';
+    $('#u').value='';$('#cap').value='';
+  }catch(e){}
+}
+document.addEventListener('click',async e=>{
+  const t=e.target;
+  const em=t.closest('[data-embed]');
+  if(em){let u=em.dataset.embed.split('?')[0];if(!u.startsWith('https://www.instagram.com/'))return;if(!u.endsWith('/'))u+='/';
+    const f=document.createElement('iframe');f.src=u+'embed/';f.setAttribute('allowfullscreen','');f.style.cssText='width:100%;height:600px;border:0;border-radius:14px;background:#fff;margin-top:12px';
+    const n=document.createElement('p');n.className='note';n.textContent='Chargement du lecteur Instagram… Si rien ne s’affiche : post privé, supprimé ou bloqué par Instagram.';
+    if(em.classList.contains('im')){em.replaceWith(f);f.after(n)}else{$('#emb').replaceChildren(f,n);em.remove()}return}
+  if(t.classList.contains('sheet')){sheetId=null;return render()}
+  if(t.id==='go'){const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:$('#code').value})});if(r.ok){await load();render()}else $('#lerr').textContent='Code incorrect.';return}
+  if(t.id==='addbtn')return doAdd();
+  if(t.id==='retry'){await api('/api/retry',{});return loadStatus()}
+  const el=t.closest('[data-open],[data-go],[data-cat],[data-season],[data-acc],[data-s],[data-i],[data-x],[data-more]');if(!el)return;
+  const d=el.dataset;
+  if(d.open!==undefined){sheetId=d.open;render();fetch('/api/caption/'+encodeURIComponent(d.open)).then(r=>r.json()).then(j=>{const e=$('#cap');if(e&&j.caption)e.textContent=j.caption}).catch(()=>{})}
+  else if(d.x!==undefined){sheetId=null;render()}
+  else if(d.go!==undefined)go(d.go);
+  else if(d.cat!==undefined){cur=d.cat;acc='';view='cat';lim=40;render();scrollTo(0,0)}
+  else if(d.season!==undefined){S=d.season;I='';view='rec';lim=40;render();scrollTo(0,0)}
+  else if(d.acc!==undefined){acc=acc===d.acc?'':d.acc;lim=40;render()}
+  else if(d.s!==undefined){S=d.s;lim=40;render()}
+  else if(d.i!==undefined){I=I===d.i?'':d.i;lim=40;render()}
+  else if(d.more!==undefined){lim+=40;if(view==='search')showRes();else{const y=scrollY;render();scrollTo(0,y)}}
+});
+document.addEventListener('input',e=>{if(e.target.id==='q'){q=e.target.value;lim=40;showRes()}});
+document.addEventListener('change',async e=>{
+  const t=e.target;
+  if(t.id==='file'&&t.files[0])return doImport(t.files[0]);
+  if(t.dataset.move!==undefined){
+    const a=t.dataset.move,c=t.value;await api('/api/move',{author:a,category:c});
+    D.forEach(b=>{if(b.author===a)b.category=c});render();
+  }
+});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='code')$('#go').click()});
+(async()=>{try{await load();render()}catch(e){}})();
+</script></body></html>
